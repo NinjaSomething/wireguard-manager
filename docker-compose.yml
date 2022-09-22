@@ -1,0 +1,10 @@
+version: '2.2'
+services:
+  wg-manager:
+    container_name: wg-manager
+    build:
+      context: ~/git/wireguard-manager/
+      dockerfile: Dockerfile
+    ports:
+      - 6001:6000
+    restart: on-failure

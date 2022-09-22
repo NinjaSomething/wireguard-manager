@@ -46,7 +46,7 @@ if __name__ == "__main__":
     carg_parser = ArgumentParser(default_config_files=["service.conf"], auto_env_var_prefix="")
     carg_parser.add("-c", "--config-file", required=False, is_config_file=True, help="Config file path")
     carg_parser.add("--uvicorn-host", required=False, type=str, default="wg-manager", help="Uvicorn hostname")
-    carg_parser.add("--uvicorn-port", required=False, type=int, default=5023, help="Uvicorn port")
+    carg_parser.add("--uvicorn-port", required=False, type=int, default=6000, help="Uvicorn port")
     config = carg_parser.parse_args()
     log.info(f"Wireguard Manager is using the following config values\n{carg_parser.format_values()}")
 
