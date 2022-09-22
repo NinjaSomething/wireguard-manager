@@ -6,6 +6,7 @@ import coloredlogs
 from configargparse import ArgumentParser
 from fastapi import FastAPI, Response
 from http import HTTPStatus
+from interfaces.v1 import vpn_router
 
 
 coloredlogs.install()
@@ -47,8 +48,19 @@ if __name__ == "__main__":
     carg_parser.add("-c", "--config-file", required=False, is_config_file=True, help="Config file path")
     carg_parser.add("--uvicorn-host", required=False, type=str, default="wg-manager", help="Uvicorn hostname")
     carg_parser.add("--uvicorn-port", required=False, type=int, default=6000, help="Uvicorn port")
+    carg_parser.add(
+        "--ssh-key-path",
+        required=False,
+        type=str,
+        default="/opt/wireguard-manager/sshkeys",
+        help="The path the the ssh keys for the wireguard servers",
+    )
     config = carg_parser.parse_args()
     log.info(f"Wireguard Manager is using the following config values\n{carg_parser.format_values()}")
+
+    vpn_router.ssh_key_path = config.ssh_key_path
+    routers = [vpn_router]
+    [app.include_router(router) for router in routers]
 
     try:
         uvicorn.run("__main__:app", host=config.uvicorn_host, port=config.uvicorn_port, log_config=None)

@@ -3,3 +3,4 @@ pydantic==1.9.0
 uvicorn[standard]==0.17.6
 configargparse==1.5.3
 coloredlogs==15.0.1
+paramiko==2.11.0
