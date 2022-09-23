@@ -1,67 +1,80 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Union
 import paramiko
 import os
+from models.vpn import VpnSshInterfaceModel, SshPeer, SshConnectionModel
 
 
-class SshConnectionModel(BaseModel):
-    ssh_username: str = "ubuntu"
-    ssh_pem_filename: str = "test-wireguard-server.pem"
-
-
-class VpnRequestModel(BaseModel):
-    name: str = "test1"
-    description: str = "test1"
-    ip_address: str = "35.167.168.44"
-    wg_interface: Optional[str] = "wg0"
-    ssh_connection_info: Optional[SshConnectionModel] = None
-
-
-class VpnModel(VpnRequestModel):
-    listen_port: int
-    public_key: str
-
-
-def extract_wg_server_config(wg_config: List[str], vpn_request) -> Optional[VpnModel]:
-    result = None
-    interface = None
-    pub_key = None
-    listening_port = None
-
-    for line in wg_config:
-        if line != "\n":
-            key, value = line.lstrip().strip("\n").split(": ")
-            match key:
-                case "interface":
-                    interface = value if vpn_request.wg_interface == value else None
-                case "public key":
-                    if interface is not None:
-                        pub_key = value
-                case "listening port":
-                    if interface is not None:
-                        listening_port = int(value)
-                case "peer":
-                    break
-
-    if interface is not None:
-        result = VpnModel(listen_port=listening_port, public_key=pub_key, **vpn_request.dict())
+def _remote_ssh_command(cmd: str, ssh_connection_info: SshConnectionModel, ssh_key_path: str) -> Union[List[str], str]:
+    """
+    Remotely execute SSH command
+    :return
+    If successful, a list of strings.  Each item is a line of the stdout.
+    If unsuccessful, a message.
+    """
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        ssh.connect(
+            ssh_connection_info.ssh_ip_address,
+            username=ssh_connection_info.ssh_username,
+            key_filename=os.path.join(ssh_key_path, ssh_connection_info.ssh_pem_filename),
+        )
+        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd, timeout=10)
+        # TODO: Add support for other corner-cases
+        if ssh_stdout.channel.recv_exit_status() == 0:
+            result = ssh_stdout.readlines()
+            result = [line.lstrip().strip("\n") for line in result]
+        else:
+            msg = ""
+            for line in ssh_stderr.readlines():
+                msg += line
+            result = msg
+        ssh.close()
+    except paramiko.SSHException as ex:
+        result = f"Failed to SSH into server: {ex}"
     return result
 
 
-def get_vpn_config(vpn: VpnRequestModel, ssh_key_path: str) -> Optional[VpnModel]:
-    """Return the full VPN config"""
-    result = None
-    if vpn.ssh_connection_info is not None:
-        cmd_to_execute = "sudo wg"
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(
-            vpn.ip_address,
-            username=vpn.ssh_connection_info.ssh_username,
-            key_filename=os.path.join(ssh_key_path, vpn.ssh_connection_info.ssh_pem_filename),
+def extract_wg_server_config(wg_interface, wg_config: List[str]) -> Optional[VpnSshInterfaceModel]:
+    # Extract the interface config
+    private_key, public_key, listen_port, fw_mark = wg_config.pop(0).split("\t")
+    vpn_model = VpnSshInterfaceModel(
+        interface=wg_interface, private_key=private_key, public_key=public_key, listen_port=listen_port, fw_mark=fw_mark
+    )
+    for line in wg_config:
+        (
+            public_key,
+            preshared_key,
+            endpoint,
+            allowed_ips,
+            latest_handshake,
+            transfer_rx,
+            transfer_tx,
+            persistent_keepalive,
+        ) = line.split("\t")
+        peer = SshPeer(
+            endpoint=endpoint,
+            public_key=public_key,
+            wg_ip_address=allowed_ips.split("/")[0],
+            preshared_key=preshared_key if preshared_key != '(none)' else None,
+            latest_handshake=latest_handshake,
+            transfer_rx=transfer_rx,
+            transfer_tx=transfer_tx,
+            persistent_keepalive=persistent_keepalive,
         )
-        ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd_to_execute, timeout=10)
-        if ssh_stdout.channel.recv_exit_status() == 0:
-            result = ssh_stdout.readlines()
-        ssh.close()
+        vpn_model.peers.append(peer)
+
+    return vpn_model
+
+
+def dump_interface_config(
+    wg_interface: str, ssh_connection_info: SshConnectionModel, ssh_key_path: str
+) -> Union[Optional[VpnSshInterfaceModel], str]:
+    """Return the full VPN config"""
+    cmd_to_execute = f"sudo wg show {wg_interface} dump"
+    ssh_response = _remote_ssh_command(cmd_to_execute, ssh_connection_info, ssh_key_path)
+    if isinstance(ssh_response, list):
+        result = extract_wg_server_config(wg_interface, ssh_response)
+    else:
+        result = ssh_response
     return result
