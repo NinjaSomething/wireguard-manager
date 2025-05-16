@@ -12,8 +12,8 @@ provider:
       statements:
         - Effect: Allow
           Resource:
-            - 'arn:aws:dynamodb:us-west-2:488855243292:table/wireguard-manager-vpn-servers-*'
-            - 'arn:aws:dynamodb:us-west-2:488855243292:table/wireguard-manager-peers-*'
+            - 'arn:aws:dynamodb:us-west-2:${AWS::AccountId}:table/wireguard-manager-vpn-servers-*'
+            - 'arn:aws:dynamodb:us-west-2:${AWS::AccountId}:table/wireguard-manager-peers-*'
           Action:
             - 'dynamodb:ListTables'
             - 'dynamodb:GetItem'

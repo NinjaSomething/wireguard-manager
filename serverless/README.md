@@ -25,10 +25,11 @@ npm install
 
 ### Run DynamoDB Local
 
-Run the DynamoDB local docker container using the provided docker-compose.yml under the `/serverless' directory:
+Run the DynamoDB local docker container using the provided docker-compose.yml under the `/serverless' directory.  This will
+create a local DynamoDB instance that you can use for development and testing.  
 
 ```bash
-docker compose up -d
+docker compose up -d dynamodb-local
 ```
 
 ### Install Serverless DynamoDB Plugin
@@ -37,29 +38,6 @@ Note: you may not need to go through the steps of installing the `serverless-dyn
 
 ```bash
 sudo npm install serverless-dynamodb --save-dev
-```
-
-It will add the plugin to `devDependencies` in the `package.json` file.
-
-Add to the `plugins` section in `serverless.yml`. 
-
-```yml
-plugins:
-  - serverless-dynamodb
-```
-
-You should also add the following config to the `custom` section in `serverless.yml`:
-
-```yml
-custom:
-  dynamodb:
-    stages:
-      - dev
-    start:
-      docker: true
-      port: 8000
-      migrate: true
-      noStart: true
 ```
 
 ### Deploy DynamoDB Tables
@@ -74,6 +52,32 @@ You can check to see if the tables have been created using the AWS CLI
 
 ```bash
 aws dynamodb list-tables --endpoint-url http://localhost:8000
+```
+
+Next you will need to add your AWS Keys to the docker-compose.yml file. 
+
+```yaml
+    environment:
+      - AWS_ACCESS_KEY_ID=INSERT_YOUR_ACCESS_KEY
+      - AWS_SECRET_ACCESS_KEY=INSERT_YOUR_SECRET_KEY
+```
+After that you can start the Wireguard Manger service.
+
+```bash
+docker compose up -d --build
+```
+
+You can access the API at the following address'http://localhost:5001/docs'.
+
+## Deploy to Staging or Production
+To deploy the wireguard-manager service to staging (stg) or production (prd) to AWS, you can use the following command:
+
+```bash
+serverless deploy --stage stg
+```
+or
+```bash
+serverless deploy --stage prd
 ```
 
 For additional local development capabilities of the `serverless-dynamodb` plugin, please refer to the corresponding GitHub repository:
