@@ -1,39 +1,11 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from models.ssh import SshConnectionModel
 
 
 class VpnMetaData(BaseModel):
     name: Optional[str] = Field(..., description="The name of the wireguard VPN")
     description: Optional[str] = Field(..., description="A description of the wireguard VPN")
-
-
-# -----------------------------------------------------------
-# Models for the SSH class
-class SshConnectionModel(BaseModel):
-    ip_address: str = Field(..., description="The IP address SSH will use to connect to the VPN server")
-    username: str = Field(..., description="The SSH username")
-    key: str = Field(..., description="The SSH private key")
-    key_password: Optional[str] = Field(None, description="The password for the SSH private key")
-
-
-class SshPeer(BaseModel):
-    endpoint: str
-    public_key: str
-    wg_ip_address: str
-    preshared_key: Optional[str]
-    latest_handshake: int
-    transfer_rx: int
-    transfer_tx: int
-    persistent_keepalive: int
-
-
-class VpnSshInterfaceModel(BaseModel):
-    interface: str
-    public_key: str
-    private_key: str
-    listen_port: int
-    fw_mark: str
-    peers: Optional[List[SshPeer]] = []
 
 
 # -----------------------------------------------------------
@@ -58,28 +30,7 @@ class VpnPutRequestModel(BaseModel):
     )
 
 
-class PeerRequestModel(BaseModel):
-    ip_address: Optional[str] = Field(
-        None,
-        description="The wireguard IP address of the peer.  If not provided, the next available IP on the VPN will be used.",
-    )
-    allowed_ips: str = Field(..., description="This defines the IPs that are allowed ")
-    public_key: str = Field(..., description="The public wireguard key for the peer")
-    private_key: Optional[str] = Field(None, description="The private wireguard key for the peer.")
-    persistent_keepalive: int = Field(..., description="The wireguard keep-alive configuration for the peer.")
-    tags: list[str] = Field(..., description="Tags associated with the wireguard peer.")
-
-
 # -----------------------------------------------------------
 # Database Models
-class PeerModel(BaseModel):
-    ip_address: str = Field(..., description="The wireguard IP address of the peer")
-    allowed_ips: str = Field(..., description="This defines the IPs that are allowed ")
-    public_key: str = Field(..., description="The public wireguard key for the peer")
-    private_key: Optional[str] = Field(None, description="The private wireguard key for the peer.")
-    persistent_keepalive: int = Field(..., description="The wireguard keep-alive configuration for the peer.")
-    tags: list[str] = Field(..., description="Tags associated with the wireguard peer.")
-
-
 class VpnModel(VpnPutRequestModel, VpnMetaData):
     pass
