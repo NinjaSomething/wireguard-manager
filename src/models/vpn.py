@@ -1,72 +1,36 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
+from models.ssh import SshConnectionModel
 
 
 class VpnMetaData(BaseModel):
-    name: Optional[str]
-    description: Optional[str]
-
-
-class PeerMetaData(VpnMetaData):
-    machine_id: Optional[str]
-
-
-# -----------------------------------------------------------
-# Models for the SSH class
-class SshConnectionModel(BaseModel):
-    ssh_ip_address: str
-    ssh_username: str
-    ssh_pem_filename: str
-
-
-class SshPeer(BaseModel):
-    endpoint: str
-    public_key: str
-    wg_ip_address: str
-    preshared_key: Optional[str]
-    latest_handshake: int
-    transfer_rx: int
-    transfer_tx: int
-    persistent_keepalive: int
-
-
-class VpnSshInterfaceModel(BaseModel):
-    interface: str
-    public_key: str
-    private_key: str
-    listen_port: int
-    fw_mark: str
-    peers: Optional[List[SshPeer]] = []
+    name: Optional[str] = Field(..., description="The name of the wireguard VPN")
+    description: Optional[str] = Field(..., description="A description of the wireguard VPN")
 
 
 # -----------------------------------------------------------
 # API Request Models
-class VpnPostRequestModel(VpnMetaData):
-    wg_ip_address: str
-    wg_interface: str
-    ssh_connection_info: SshConnectionModel
+class WireguardRequestModel(BaseModel):
+    ip_address: str = Field(..., description="The wireguard IP address")
+    address_space: str = Field(..., description="The subnet for the wireguard VPN. E.g. 10.0.0.0/16")
+    interface: str = Field(..., description="The wireguard interface name")
+    public_key: str = Field(..., description="The wireguard public key")
+    private_key: str = Field(..., description="The wireguard private key")
+    listen_port: int = Field(..., description="The wireguard listen port")
 
 
-class VpnPutRequestModel(VpnMetaData):
-    wg_ip_address: Optional[str]
-    ssh_connection_info: Optional[SshConnectionModel]
+class VpnPutRequestModel(BaseModel):
+    wireguard: WireguardRequestModel = Field(
+        ..., description="This contains all the wireguard configuration for the VPN server"
+    )
+    ssh_connection_info: Optional[SshConnectionModel] = Field(
+        None,
+        description="This contains all the SSH information required for this service to manage the VPN server. If "
+        "provided, this service will add and remove peers from the VPN server itself.",
+    )
 
 
 # -----------------------------------------------------------
 # Database Models
-class PeerDbModel(PeerMetaData):
-    wg_ip_address: str
-    public_key: str
-    private_key: Optional[str]
-    preshared_key: Optional[str]
-    persistent_keepalive: int
-
-
-class VpnDbModel(VpnMetaData):
-    wg_ip_address: str
-    interface: str
-    public_key: str
-    private_key: Optional[str]
-    listen_port: int
-    ssh_connection_info: SshConnectionModel
-    peers: List[PeerDbModel] = []
+class VpnModel(VpnPutRequestModel, VpnMetaData):
+    pass

@@ -1,0 +1,70 @@
+service: site-acceptance-test
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'stg'}
+  region: us-west-2
+  iam:
+    role:
+      name: wireguard-manager-vpn-servers
+      statements:
+        - Effect: Allow
+          Resource:
+            - 'arn:aws:dynamodb:us-west-2:488855243292:table/wireguard-manager-vpn-servers-*'
+            - 'arn:aws:dynamodb:us-west-2:488855243292:table/wireguard-manager-peers-*'
+          Action:
+            - 'dynamodb:ListTables'
+            - 'dynamodb:GetItem'
+            - 'dynamodb:Scan'
+            - 'dynamodb:Query'
+            - 'dynamodb:DescribeTable'
+
+
+resources: # CloudFormation template syntax
+  Resources:
+    WireguardManagerVpnServersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: name
+            AttributeType: S
+        KeySchema:
+          - AttributeName: name
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: 'wireguard-manager-vpn-servers-${self:provider.stage}'
+    WireguardManagerPeersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: peer_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: peer_id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: 'wireguard-manager-peers-${self:provider.stage}'
+
+
+configValidationMode: error
+
+# The sections below are used for development
+
+plugins:
+  - serverless-dynamodb
+
+custom:
+  dynamodb:
+    stages:
+      - dev
+    start:
+      docker: true
+      port: 8000
+      migrate: true
+      noStart: true
