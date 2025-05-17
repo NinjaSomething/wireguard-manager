@@ -5,8 +5,8 @@ on:
     types: [published]
 
 env:
-  AWS_REGION: us-west-2                      # set this to your preferred AWS region, e.g. us-west-1
-  ECR_REPOSITORY: wireguard-manager          # set this to your Amazon ECR repository name
+  AWS_REGION: us-west-2                         # set this to your preferred AWS region, e.g. us-west-1
+  ECR_REPOSITORY: g0d6f2g5/wireguard-manager    # set this to your Amazon ECR repository name
 
 jobs:
 
