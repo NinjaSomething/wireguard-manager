@@ -33,25 +33,13 @@ jobs:
         registry-type: public
 
 
-    - name: Build the Docker image
+    - name: Build and Push the Docker image
       env:
         REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
         IMAGE_TAG: ${{ github.ref_name }}
       run: |
-        echo REGISTRY $REGISTRY
-        echo REGISTRY_ALIAS $REGISTRY_ALIAS
-        echo REPOSITORY $REPOSITORY
-        echo IMAGE_TAG $IMAGE_TAG
+        echo "!!!! Building Docker image...$REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG"
         docker build -t $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG .
-
-    - name: Deploy the Docker image
-      env:
-        REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
-        IMAGE_TAG: ${{ github.ref_name }}
-      run: |
-        echo REGISTRY $REGISTRY
-        echo REGISTRY_ALIAS $REGISTRY_ALIAS
-        echo REPOSITORY $REPOSITORY
-        echo IMAGE_TAG $IMAGE_TAG
+        
+        echo "!!!! Pushing Docker image...$REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG"
         docker push $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG
-    
