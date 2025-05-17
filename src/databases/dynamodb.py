@@ -47,7 +47,7 @@ class DynamoDb(InMemoryDataStore):
         dynamodb = None
         match environment:
             case environment.DEV:
-                dynamodb = boto3.resource("dynamodb", endpoint_url=dynamodb_endpoint_url)
+                dynamodb = boto3.resource("dynamodb", region_name=aws_region, endpoint_url=dynamodb_endpoint_url)
             case environment.STAGING:
                 dynamodb = boto3.resource("dynamodb", region_name=aws_region)
             case environment.PRODUCTION:
