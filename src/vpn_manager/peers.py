@@ -59,10 +59,7 @@ class Peer:
         return self._tags
 
     def to_model(self) -> PeerModel:
-        return PeerModel(
-            ip_address=self._ip_address,
-            allowed_ips=self._allowed_ips,
-            public_key=self._public_key,
+        return PeerModel(ip_address=self._ip_address, allowed_ips=self._allowed_ips, public_key=self._public_key,
             private_key=self._private_key,
             persistent_keepalive=self._persistent_keepalive,
             tags=self._tags,
