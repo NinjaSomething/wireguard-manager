@@ -26,23 +26,35 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+      id: login-ecr-public
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        registry-type: public
+
 
     - name: Build the Docker image
       env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
+        REGISTRY_ALIAS: my-ecr-public-registry-alias
+        REPOSITORY: my-ecr-public-repo
         IMAGE_TAG: ${{ github.ref_name }}
       run: |
-        echo ECR_REGISTRY $ECR_REGISTRY
-        echo ECR_REPOSITORY $ECR_REPOSITORY
+        echo REGISTRY $REGISTRY
+        echo REGISTRY_ALIAS $REGISTRY_ALIAS
+        echo REPOSITORY $REPOSITORY
         echo IMAGE_TAG $IMAGE_TAG
-        docker build . --file Dockerfile --tag $ECR_REPOSITORY:$IMAGE_TAG
+        docker build -t $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG .
 
     - name: Deploy the Docker image
       env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
+        REGISTRY_ALIAS: my-ecr-public-registry-alias
+        REPOSITORY: my-ecr-public-repo
         IMAGE_TAG: ${{ github.ref_name }}
       run: |
-        docker push $ECR_REPOSITORY:$IMAGE_TAG
+        echo REGISTRY $REGISTRY
+        echo REGISTRY_ALIAS $REGISTRY_ALIAS
+        echo REPOSITORY $REPOSITORY
+        echo IMAGE_TAG $IMAGE_TAG
+        docker push $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG
     
