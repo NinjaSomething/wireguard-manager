@@ -40,6 +40,7 @@ def update_ssh(name: str, ssh_connection_info: SshConnectionModel) -> Response:
     Update the SSH connection information for a VPN server.  This is used to connect to the VPN server to add and
     remove peers.
     """
+    # TODO: Add peers to the VPN that exist in the manager but not on the wg server
     vpn_manager = vpn_router.vpn_manager
     vpn = vpn_manager.get_vpn(name)
     if vpn is None:
