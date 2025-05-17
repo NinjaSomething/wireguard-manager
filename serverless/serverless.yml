@@ -1,6 +1,6 @@
-service: site-acceptance-test
+service: wireguard-manager
 
-frameworkVersion: '3'
+frameworkVersion: '4'
 
 provider:
   name: aws
