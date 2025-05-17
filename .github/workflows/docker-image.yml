@@ -6,7 +6,8 @@ on:
 
 env:
   AWS_REGION: us-east-1                         # set this to your preferred AWS region, e.g. us-east-1
-  ECR_REPOSITORY: public.ecr.aws/g0d6f2g5/wireguard-manager    # set this to your Amazon ECR repository name
+  REGISTRY_ALIAS: g0d6f2g5
+  REPOSITORY: wireguard-manager
 
 jobs:
 
@@ -35,8 +36,6 @@ jobs:
     - name: Build the Docker image
       env:
         REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
-        REGISTRY_ALIAS: my-ecr-public-registry-alias
-        REPOSITORY: my-ecr-public-repo
         IMAGE_TAG: ${{ github.ref_name }}
       run: |
         echo REGISTRY $REGISTRY
@@ -48,8 +47,6 @@ jobs:
     - name: Deploy the Docker image
       env:
         REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
-        REGISTRY_ALIAS: my-ecr-public-registry-alias
-        REPOSITORY: my-ecr-public-repo
         IMAGE_TAG: ${{ github.ref_name }}
       run: |
         echo REGISTRY $REGISTRY
