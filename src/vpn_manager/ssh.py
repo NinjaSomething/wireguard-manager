@@ -128,11 +128,7 @@ def generate_wireguard_keys() -> tuple[str, str]:
     """
     # generate private key
     private_key = X25519PrivateKey.generate()
-    bytes_ = private_key.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
+    bytes_ = private_key.private_bytes(encoding=serialization.Encoding.Raw, format=serialization.PrivateFormat.Raw, encryption_algorithm=serialization.NoEncryption())
     private_key_str = codecs.encode(bytes_, "base64").decode("utf8").strip()
 
     # derive public key
