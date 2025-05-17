@@ -181,7 +181,9 @@ def get_peer_by_tag(vpn_name: str, tag: str) -> list[PeerModel]:
     return [peer.to_model() for peer in peers]
 
 
-@peer_router.get("/vpn/{vpn_name}/peers/{ip_address}/generate-wireguard-keys", tags=["peers"], response_model=PeerModel)
+@peer_router.post(
+    "/vpn/{vpn_name}/peers/{ip_address}/generate-wireguard-keys", tags=["peers"], response_model=PeerModel
+)
 def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerModel:
     """Generate new WireGuard keys for a peer."""
     vpn_manager = peer_router.vpn_manager
