@@ -51,7 +51,7 @@ if __name__ == "__main__":
     carg_parser = ArgumentParser(default_config_files=["service.conf"], auto_env_var_prefix="")
     carg_parser.add("-c", "--config-file", required=False, is_config_file=True, help="Config file path")
     carg_parser.add("--uvicorn-host", required=False, type=str, default="wg-manager", help="Uvicorn hostname")
-    carg_parser.add("--uvicorn-port", required=False, type=int, default=6000, help="Uvicorn port")
+    carg_parser.add("--uvicorn-port", required=False, type=int, default=5000, help="Uvicorn port")
     carg_parser.add("--aws-region", required=False, type=str, default="us-west-2", help="The AWS region to use")
     carg_parser.add(
         "--dynamodb-endpoint",
@@ -68,6 +68,7 @@ if __name__ == "__main__":
         help="Use this to configure which environment the service should use",
     )
     config = carg_parser.parse_args()
+    log.info(f"The service is using the following config values\n{carg_parser.format_values()}")
     dynamo_db = DynamoDb(
         environment=Environment(config.environment),
         dynamodb_endpoint_url=config.dynamodb_endpoint,
