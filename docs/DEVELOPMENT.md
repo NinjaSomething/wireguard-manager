@@ -31,15 +31,6 @@ You can check to see if the tables have been created using the AWS CLI
 aws dynamodb list-tables --endpoint-url http://localhost:8000
 ```
 
-Next you will need to add your AWS Keys to the docker-compose.yml file. This will give the locally running service 
-permissions to access the DynamoDB tables.
-
-```yaml
-    environment:
-      - AWS_ACCESS_KEY_ID=INSERT_YOUR_ACCESS_KEY
-      - AWS_SECRET_ACCESS_KEY=INSERT_YOUR_SECRET_KEY
-```
-
 # Run Wireguard Manager Locally
 After that you can start the Wireguard Manger service.
 
