@@ -33,7 +33,4 @@ jobs:
     - name: Build the Docker image
       run: |
         docker build . --file Dockerfile --tag $ECR_REGISTRY/$ECR_REPOSITORY:${{  github.ref_name }}
-
-    - name: Deploy the Docker image
-      run: |
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{  github.ref_name }}
