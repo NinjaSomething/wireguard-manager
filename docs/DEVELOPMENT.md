@@ -1,11 +1,18 @@
 # Local Development
 This is a guide for doing local development for the Wireguard Manager.
 
-# Prerequisites
+## Prerequisites
 - [Setup](SETUP.md)
 - Docker
 
-# Initial Setup
+## Pre-commit Hooks
+Run the following to enable the pre-commit checks:
+```
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+## Initial Service Setup
 These instructions only need to be done once.  This will create the required tables in DynamoDB.
 
 ### Run DynamoDB Locally
