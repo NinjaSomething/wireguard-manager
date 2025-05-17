@@ -34,5 +34,15 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.ref_name }}
       run: |
+        echo ECR_REGISTRY $ECR_REGISTRY
+        echo ECR_REPOSITORY $ECR_REPOSITORY
+        echo IMAGE_TAG $IMAGE_TAG
         docker build . --file Dockerfile --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    - name: Deploy the Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.ref_name }}
+      run: |
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+    
