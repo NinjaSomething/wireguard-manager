@@ -6,8 +6,10 @@ provided for the server, this will add and remove clients from the Wireguard ser
 The assumed architecture is that each VPN contains a single WireGuard Server that coordinates communication with 
 multiple clients.
 
+The public docker image can be found [here](https://gallery.ecr.aws/g0d6f2g5/wireguard-manager).
+
 ## Deployment
-Instructions for deploying up the Wireguard Manager can be found [here](docs/DEPLOYMENT.md).
+Instructions for deploying the Wireguard Manager can be found [here](docs/DEPLOYMENT.md).
 
 ## User Guide
 Instructions for using the Wireguard Manager can be found [here](docs/USAGE.md).
