@@ -6,8 +6,7 @@ on:
 
 env:
   AWS_REGION: us-west-2                      # set this to your preferred AWS region, e.g. us-west-1
-  ECR_REGISTRY: public.ecr.aws/g0d6f2g5       # set this to your Amazon ECR registry name
-  ECR_REPOSITORY: wireguard-manager           # set this to your Amazon ECR repository name
+  ECR_REPOSITORY: public.ecr.aws/g0d6f2g5/wireguard-manager       # set this to your Amazon ECR repository name
 
 jobs:
 
@@ -31,6 +30,9 @@ jobs:
       uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
 
     - name: Build the Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.ref_name }}
       run: |
-        docker build . --file Dockerfile --tag $ECR_REGISTRY/$ECR_REPOSITORY:${{  github.ref_name }}
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{  github.ref_name }}
+        docker build . --file Dockerfile --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
