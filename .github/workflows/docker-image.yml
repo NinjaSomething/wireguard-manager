@@ -2,7 +2,14 @@ name: Docker Image CI
 
 on:
   release:
-    types: [created, published]
+    types: [published]
+
+env:
+  AWS_REGION: us-west-2                      # set this to your preferred AWS region, e.g. us-west-1
+  ECR_REGISTRY: public.ecr.aws/g0d6f2g5       # set this to your Amazon ECR registry name
+  ECR_REPOSITORY: wireguard-manager           # set this to your Amazon ECR repository name
+  CONTAINER_NAME: MY_CONTAINER_NAME           # set this to the name of the container in the
+                                               # containerDefinitions section of your task definition
 
 jobs:
 
@@ -11,7 +18,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+
+    - name: Build and Push the Docker image
       run: |
-        docker build . --file Dockerfile --tag public.ecr.aws/g0d6f2g5/wireguard-manager:${{  github.ref_name }}
+        docker build . --file Dockerfile --tag $ECR_REGISTRY/$ECR_REPOSITORY:${{  github.ref_name }}
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{  github.ref_name }}
