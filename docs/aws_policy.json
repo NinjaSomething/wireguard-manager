@@ -1,0 +1,91 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "CloudFomration",
+            "Effect": "Allow",
+            "Action": [
+                "cloudformation:CreateStack",
+                "cloudformation:DescribeStackResource",
+                "cloudformation:DescribeStacks",
+                "cloudformation:UpdateStack",
+                "cloudformation:ListStackResources",
+                "cloudformation:DeleteStack",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:ValidateTemplate",
+                "kms:CreateKey"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "Serverless",
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetRole",
+                "iam:TagRole",
+                "iam:PutRolePolicy",
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePolicy",
+                "iam:PassRole",
+                "ssm:GetParameter",
+                "s3:CreateBucket",
+                "s3:ListBucket",
+                "s3:ListBucketVersions",
+                "s3:GetBucketLocation",
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteBucket",
+                "s3:DeleteObject",
+                "s3:DeleteObjectVersion",
+                "s3:DeleteBucketPolicy"
+            ],
+            "Resource": [
+                "arn:aws:cloudformation:*:*:stack/wireguard-manager-*/*",
+                "arn:aws:ssm:*:*:parameter/serverless-framework/deployment/s3-bucket",
+                "arn:aws:s3:::serverless-framework-deployments-*",
+                "arn:aws:iam::*:role/wireguard_manager_role",
+                "arn:aws:iam::*:role/wireguard_manager_role-test"
+            ]
+        },
+        {
+            "Sid": "WireguardManager",
+            "Effect": "Allow",
+            "Action": [
+                "apprunner:CreateService",
+                "apprunner:DeleteService",
+                "apprunner:TagResource",
+                "apprunner:DescribeService",
+                "dynamodb:DescribeTable",
+                "dynamodb:CreateTable",
+                "dynamodb:CreateTableReplica",
+                "dynamodb:CreateGlobalTable",
+                "dynamodb:DeleteTable",
+                "dynamodb:DeleteTableReplica",
+                "dynamodb:TagResource"
+            ],
+            "Resource": [
+                "arn:aws:apprunner:*:*:service/wireguard-manager-*/*",
+                "arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*",
+                "arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*"
+            ]
+        },
+        {
+            "Sid": "KMS",
+            "Effect": "Allow",
+            "Action": [
+                "kms:TagResource",
+                "kms:DeleteCustomKeyStore",
+                "kms:ScheduleKeyDeletion",
+                "kms:DescribeKey",
+                "kms:CreateAlias",
+                "kms:DeleteAlias",
+                "kms:CreateGrant"
+            ],
+            "Resource": [
+                "arn:aws:kms:*:*:key/*",
+                "arn:aws:kms:*:*:alias/*"
+            ]
+        }
+    ]
+}
