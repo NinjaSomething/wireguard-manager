@@ -56,6 +56,8 @@
                 "apprunner:DeleteService",
                 "apprunner:TagResource",
                 "apprunner:DescribeService",
+                "apprunner:DescribeService",
+                "apprunner:UpdateService",
                 "dynamodb:DescribeTable",
                 "dynamodb:CreateTable",
                 "dynamodb:CreateTableReplica",
