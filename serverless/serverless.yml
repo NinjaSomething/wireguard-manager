@@ -6,24 +6,59 @@ provider:
   name: aws
   stage: ${opt:stage, 'stg'}
   region: us-west-2
-  iam:
-    role:
-      name: wireguard-manager-vpn-servers
-      statements:
-        - Effect: Allow
-          Resource:
-            - 'arn:aws:dynamodb:us-west-2:${AWS::AccountId}:table/wireguard-manager-vpn-servers-*'
-            - 'arn:aws:dynamodb:us-west-2:${AWS::AccountId}:table/wireguard-manager-peers-*'
-          Action:
-            - 'dynamodb:ListTables'
-            - 'dynamodb:GetItem'
-            - 'dynamodb:Scan'
-            - 'dynamodb:Query'
-            - 'dynamodb:DescribeTable'
 
 
 resources: # CloudFormation template syntax
   Resources:
+    WireguardManagerRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: wireguard_manager_role
+        Path: /
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - tasks.apprunner.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyDocument: {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "VisualEditor0",
+                "Effect": "Allow",
+                "Action": [
+                  "dynamodb:Scan",
+                  "dynamodb:PutItem",
+                  "dynamodb:DeleteItem"
+                ],
+                "Resource": [
+                  "arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*",
+                  "arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*"
+                ]
+              }
+            ]
+            }
+            PolicyName: wireguard_manager_policy
+    WireguardManagerKsmKey:
+      Type: AWS::KMS::Key
+      Properties:
+        Description: 'Wireguard Manager KSM Key'
+        Enabled: True
+        EnableKeyRotation: False
+        KeySpec: SYMMETRIC_DEFAULT
+        KeyUsage: ENCRYPT_DECRYPT
+        MultiRegion: False
+        Origin: AWS_KMS
+    WireguardManagerKsmKeyAlias:
+      Type: AWS::KMS::Alias
+      Properties:
+        AliasName: alias/wireguard-manager-kms-${self:provider.stage}
+        TargetKeyId: !Ref WireguardManagerKsmKey
     WireguardManagerVpnServersTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -50,6 +85,42 @@ resources: # CloudFormation template syntax
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: 'wireguard-manager-peers-${self:provider.stage}'
+    WireguardManagerAppRunner:
+      Type: AWS::AppRunner::Service
+      Properties:
+        EncryptionConfiguration:
+          KmsKey: !GetAtt WireguardManagerKsmKey.Arn
+        HealthCheckConfiguration:
+          HealthyThreshold: 1
+          Interval: 10
+          Protocol: TCP
+          Timeout: 5
+          UnhealthyThreshold: 5
+        InstanceConfiguration:
+          InstanceRoleArn: arn:aws:iam::${aws:accountId}:role/wireguard_manager_role
+        NetworkConfiguration:
+          IngressConfiguration:
+            IsPubliclyAccessible: True
+          IpAddressType: IPV4
+        ObservabilityConfiguration:
+          ObservabilityEnabled: False
+        ServiceName: wireguard-manager-${self:provider.stage}
+        SourceConfiguration:
+          AutoDeploymentsEnabled: False
+          ImageRepository:
+            ImageConfiguration:
+              Port: 8080
+              RuntimeEnvironmentVariables:
+                - Name: UVICORN_HOST
+                  Value: 0.0.0.0
+                - Name: UVICORN_PORT
+                  Value: 8080
+                - Name: ENVIRONMENT
+                  Value: ${self:provider.stage}
+                - Name: AWS_REGION
+                  Value: ${self:provider.region}
+            ImageIdentifier: public.ecr.aws/g0d6f2g5/wireguard-manager:0.0.1
+            ImageRepositoryType: ECR_PUBLIC
 
 
 configValidationMode: error
