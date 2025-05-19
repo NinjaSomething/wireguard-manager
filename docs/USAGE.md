@@ -5,7 +5,7 @@ functionality for tagging clients with metadata.  The tags are useful for organi
 access to the VPN.
 
 ## Wireguard VPN Server
-Start by adding a Wireguard VPN server.  When you do this you will give the VPN a name which must be unique. If you include 
+Start by adding a Wireguard VPN server.  When you do this give the VPN a unique name. If you include 
 an SSH key, the Wireguard Manager will automatically manage changes to the clients on the VPN server.  If you do not 
 include an SSH key, you can add clients to the Wireguard Manager, and tag them with meta-data, but you will need to 
 manually manage changes to the clients on the wireguard server yourself.
