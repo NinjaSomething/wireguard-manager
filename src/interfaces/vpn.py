@@ -4,6 +4,7 @@ from typing import Optional
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnModel, VpnPutRequestModel
 from models.ssh import SshConnectionModel
+from vpn_manager import VpnUpdateException
 import logging
 
 
@@ -27,6 +28,12 @@ def add_vpn(name: str, vpn: VpnPutRequestModel, description: Optional[str] = "")
     vpn_manager = vpn_router.vpn_manager
     try:
         vpn_manager.add_vpn(name, description, vpn)
+        if vpn.ssh_connection_info:
+            #  Keep the manager aligned with the wireguard server.  Import existing peers.
+            try:
+                vpn_manager.import_peers(name)
+            except VpnUpdateException as ex:
+                raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     except ValueError as ex:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=f"Failed to add VPN {name}: {ex}")
     except KeyError as ex:
