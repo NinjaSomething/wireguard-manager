@@ -85,42 +85,6 @@ resources: # CloudFormation template syntax
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: 'wireguard-manager-peers-${self:provider.stage}'
-    WireguardManagerAppRunner:
-      Type: AWS::AppRunner::Service
-      Properties:
-        EncryptionConfiguration:
-          KmsKey: !GetAtt WireguardManagerKsmKey.Arn
-        HealthCheckConfiguration:
-          HealthyThreshold: 1
-          Interval: 10
-          Protocol: TCP
-          Timeout: 5
-          UnhealthyThreshold: 5
-        InstanceConfiguration:
-          InstanceRoleArn: arn:aws:iam::${aws:accountId}:role/wireguard_manager_role
-        NetworkConfiguration:
-          IngressConfiguration:
-            IsPubliclyAccessible: True
-          IpAddressType: IPV4
-        ObservabilityConfiguration:
-          ObservabilityEnabled: False
-        ServiceName: wireguard-manager-${self:provider.stage}
-        SourceConfiguration:
-          AutoDeploymentsEnabled: False
-          ImageRepository:
-            ImageConfiguration:
-              Port: 8080
-              RuntimeEnvironmentVariables:
-                - Name: UVICORN_HOST
-                  Value: 0.0.0.0
-                - Name: UVICORN_PORT
-                  Value: 8080
-                - Name: ENVIRONMENT
-                  Value: ${self:provider.stage}
-                - Name: AWS_REGION
-                  Value: ${self:provider.region}
-            ImageIdentifier: public.ecr.aws/g0d6f2g5/wireguard-manager:0.0.1
-            ImageRepositoryType: ECR_PUBLIC
 
 
 configValidationMode: error
