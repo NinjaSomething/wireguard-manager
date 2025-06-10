@@ -2,7 +2,6 @@ from fastapi import Response, HTTPException
 from fastapi.responses import PlainTextResponse
 from uuid import uuid4
 from http import HTTPStatus
-from vpn_manager.ssh import dump_interface_config
 from models.peers import PeerModel, PeerRequestModel
 from vpn_manager.peers import Peer
 import logging
@@ -11,6 +10,7 @@ from vpn_manager.ssh import add_peer as ssh_add_peer
 from vpn_manager.ssh import remove_peer as ssh_remove_peer
 from vpn_manager.ssh import SshException
 from vpn_manager.ssh import generate_wireguard_keys
+from vpn_manager import VpnUpdateException
 
 
 log = logging.getLogger(__name__)
@@ -224,34 +224,8 @@ def import_vpn_peers(vpn_name: str) -> list[PeerModel]:
             detail=f"SSH connection information is not found for VPN {vpn_name}",
         )
 
-    # This downloads the wireguard server config and extracts the data.
-    wg_config_data = dump_interface_config(vpn.interface, vpn.ssh_connection_info)
-    if isinstance(wg_config_data, str):
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Unable to import WireGuard server {vpn.name} via " f"SSH: {wg_config_data}",
-        )
-
-    add_peers = []
-    for peer in wg_config_data.peers:
-        import_peer = Peer(
-            peer_id=str(uuid4()),
-            ip_address=peer.wg_ip_address,
-            public_key=peer.public_key,
-            persistent_keepalive=peer.persistent_keepalive,
-            allowed_ips=vpn.address_space,
-            tags=["imported"],
-        )
-        # Check if the peer already exists in the VPN
-        skip_peer = False
-        for existing_peer in vpn.peers:
-            if existing_peer.ip_address == import_peer.ip_address:
-                log.warning(f"Skipping import of peer {import_peer.ip_address} as it already exists.")
-                skip_peer = True
-
-        if not skip_peer:
-            add_peers.append(import_peer)
-            vpn.peers.append(import_peer)
-    vpn.calculate_available_ips()
-
-    return [peer.to_model() for peer in add_peers]
+    try:
+        added_peers = vpn_manager.import_peers(vpn_name)
+    except VpnUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
+    return [peer.to_model() for peer in added_peers]

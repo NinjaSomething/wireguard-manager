@@ -1,10 +1,20 @@
 import ipaddress
+import logging
+from uuid import uuid4
 from databases.interface import AbstractDatabase
 from vpn_manager.vpn import VpnServer
 from vpn_manager.peers import PeerList, Peer
 from models.vpn import VpnPutRequestModel
 from vpn_manager.ssh import generate_wireguard_keys
 from vpn_manager.ssh import dump_interface_config
+
+log = logging.getLogger(__name__)
+
+
+class VpnUpdateException(Exception):
+    """Custom exception for VPN update errors."""
+
+    pass
 
 
 class VpnManager:
@@ -100,3 +110,34 @@ class VpnManager:
         peer.private_key, peer.public_key = generate_wireguard_keys()
         self._db_manager.add_peer(vpn_name, peer.to_db_model())
         return peer
+
+    def import_peers(self, vpn_name: str) -> list[Peer]:
+        # This downloads the wireguard server config and extracts the data.
+        _vpn = self._vpn_networks[vpn_name]
+        wg_config_data = dump_interface_config(_vpn.interface, _vpn.ssh_connection_info)
+        if isinstance(wg_config_data, str):
+            raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
+
+        add_peers = []
+        for peer in wg_config_data.peers:
+            import_peer = Peer(
+                peer_id=str(uuid4()),
+                ip_address=peer.wg_ip_address,
+                public_key=peer.public_key,
+                persistent_keepalive=peer.persistent_keepalive,
+                allowed_ips=_vpn.address_space,
+                tags=["imported"],
+            )
+            # Check if the peer already exists in the VPN
+            skip_peer = False
+            for existing_peer in _vpn.peers:
+                if existing_peer.ip_address == import_peer.ip_address:
+                    log.warning(f"Skipping import of peer {import_peer.ip_address} as it already exists.")
+                    skip_peer = True
+
+            if not skip_peer:
+                add_peers.append(import_peer)
+                _vpn.peers.append(import_peer)
+        _vpn.calculate_available_ips()
+
+        return add_peers
