@@ -141,3 +141,11 @@ class VpnManager:
         _vpn.calculate_available_ips()
 
         return add_peers
+
+    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
+        """Add a tag to an existing peer"""
+        self._db_manager.add_tag_to_peer(vpn_name, peer_ip, tag)
+
+    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
+        """Delete a tag from an existing peer"""
+        self._db_manager.delete_tag_from_peer(vpn_name, peer_ip, tag)

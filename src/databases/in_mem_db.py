@@ -87,3 +87,22 @@ class InMemoryDataStore(AbstractDatabase):
                 )
                 result.append(peer)
         return result
+
+    def get_peer(self, vpn_name: str, peer_ip: str) -> Peer | None:
+        """Return a specific peer from the database.  If the peer does not exist, return None."""
+        for peer in self.get_peers(vpn_name):
+            if peer.ip_address == peer_ip:
+                return peer
+        return None
+
+    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
+        """Add a tag to a peer."""
+        peer = self.get_peer(vpn_name, peer_ip)
+        if peer is not None and tag not in peer.tags:
+            peer.tags.append(tag)
+
+    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
+        """Delete tag from a peer."""
+        peer = self.get_peer(vpn_name, peer_ip)
+        if peer is not None and tag in peer.tags:
+            peer.tags.remove(tag)
