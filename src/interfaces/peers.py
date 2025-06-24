@@ -32,12 +32,15 @@ def validate_peer_exists(vpn_name: str, ip_address: str, vpn_manager) -> None:
 
 
 @peer_router.get("/vpn/{vpn_name}/peers", tags=["peers"], response_model=list[PeerModel])
-def get_peers(vpn_name: str) -> Response:
+def get_peers(vpn_name: str, hide_secrets: bool = True) -> Response:
     """Get all the peers for a given VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
-    return vpn.peers.to_model()
+    peer_models = vpn.peers.to_model()
+    for peer_model in peer_models:
+        peer_model.opaque = hide_secrets
+    return peer_models
 
 
 @peer_router.post("/vpn/{vpn_name}/peer", tags=["peers"], response_model=PeerModel)
@@ -123,11 +126,13 @@ def delete_peer(vpn_name: str, ip_address: str) -> Response:
 
 
 @peer_router.get("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"], response_model=PeerModel)
-def get_peer(vpn_name: str, ip_address: str) -> PeerModel:
+def get_peer(vpn_name: str, ip_address: str, hide_secrets: bool = True) -> PeerModel:
     """Return the peer with the given IP address on a given VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
-    return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+    peer_model = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+    peer_model.opaque = hide_secrets
+    return peer_model
 
 
 @peer_router.get("/vpn/{vpn_name}/peer/{ip_address}/config", tags=["peers"], response_class=PlainTextResponse)
@@ -140,7 +145,7 @@ def get_peer_wg_config(vpn_name: str, ip_address: str):
     peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
     response = f"""[Interface]
 Address = {peer.ip_address}
-PrivateKey = {peer.private_key if peer.private_key else "[INSERT_PRIVATE_KEY]"}
+PrivateKey = {peer.private_key.get_secret_value() if peer.private_key else "[INSERT_PRIVATE_KEY]"}
 
 [Peer]
 PublicKey = {vpn.public_key}
@@ -151,12 +156,15 @@ PersistentKeepalive = {peer.persistent_keepalive}"""
 
 
 @peer_router.get("/vpn/{vpn_name}/peer/tag/{tag}", tags=["peers"], response_model=list[PeerModel])
-def get_peer_by_tag(vpn_name: str, tag: str) -> list[PeerModel]:
+def get_peer_by_tag(vpn_name: str, tag: str, hide_secrets: bool = True) -> list[PeerModel]:
     """Return the peers with the given tag on a given VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     peers = vpn_manager.get_peers_by_tag(vpn_name=vpn_name, tag=tag)
-    return [peer.to_model() for peer in peers]
+    peer_models = [peer.to_model() for peer in peers]
+    for peer_model in peer_models:
+        peer_model.opaque = hide_secrets
+    return peer_models
 
 
 @peer_router.post(

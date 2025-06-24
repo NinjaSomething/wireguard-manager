@@ -97,6 +97,7 @@ class VpnManager:
             _vpn.peers.remove(peer)
 
     def generate_new_peer_keys(self, vpn_name: str, peer: Peer):
+        self._db_manager.delete_peer(vpn_name, peer.to_db_model())
         peer.private_key, peer.public_key = generate_wireguard_keys()
         self._db_manager.add_peer(vpn_name, peer.to_db_model())
         return peer
