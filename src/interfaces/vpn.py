@@ -1,6 +1,9 @@
 from fastapi import Response, HTTPException
 from http import HTTPStatus
 from typing import Optional
+
+from setuptools.windows_support import hide_file
+
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnModel, VpnPutRequestModel
 from models.ssh import SshConnectionModel
@@ -22,10 +25,13 @@ def validate_vpn_exists(name: str, vpn_manager) -> None:
 
 
 @vpn_router.get("/vpn", tags=["vpn"], response_model=list[VpnModel])
-def get_all_vpns() -> list[VpnModel]:
+def get_all_vpns(hide_secrets: bool = True) -> list[VpnModel]:
     """Get all the VPN servers managed by this service."""
     vpn_manager = vpn_router.vpn_manager
-    return [vpn.to_model() for vpn in vpn_manager.get_all_vpn()]
+    vpn_models = [vpn.to_model() for vpn in vpn_manager.get_all_vpn()]
+    for vpn_model in vpn_models:
+        vpn_model.opaque = hide_secrets
+    return vpn_models
 
 
 @vpn_router.put("/vpn/{name}", tags=["vpn"])
@@ -87,8 +93,10 @@ def delete_vpn(name: str) -> Response:
 
 
 @vpn_router.get("/vpn/{name}", tags=["vpn"], response_model=VpnModel)
-def get_vpn(name: str) -> VpnModel:
+def get_vpn(name: str, hide_secrets: bool = True) -> VpnModel:
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    return vpn.to_model()
+    vpn_model = vpn.to_model()
+    vpn_model.opaque = hide_secrets
+    return vpn_model

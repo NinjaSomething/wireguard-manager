@@ -31,11 +31,12 @@ def _remote_ssh_command(cmd: str, ssh_connection_info: SshConnectionModel) -> Un
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
+        key_password = ssh_connection_info.key_password.get_secret_value() if ssh_connection_info.key_password else None
         ssh.connect(
             ssh_connection_info.ip_address,
             username=ssh_connection_info.username,
             pkey=paramiko.RSAKey.from_private_key(
-                StringIO(ssh_connection_info.key), password=ssh_connection_info.key_password
+                StringIO(ssh_connection_info.key.get_secret_value()), password=key_password
             ),
         )
         ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd, timeout=10)

@@ -115,6 +115,11 @@ class DynamoDb(InMemoryDataStore):
 
     def add_vpn(self, new_vpn: VpnServer):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
+        if new_vpn.ssh_connection_info and new_vpn.ssh_connection_info.key_password:
+            key_password = new_vpn.ssh_connection_info.key_password.get_secret_value()
+        else:
+            key_password = None
+
         vpn_dynamo = VpnDynamoModel(
             name=new_vpn.name,
             description=new_vpn.description,
@@ -122,12 +127,12 @@ class DynamoDb(InMemoryDataStore):
             wireguard_subnet=new_vpn.address_space,
             wireguard_interface=new_vpn.interface,
             wireguard_public_key=new_vpn.public_key,
-            wireguard_private_key=new_vpn.private_key,
+            wireguard_private_key=new_vpn.private_key.get_secret_value(),
             wireguard_listen_port=new_vpn.listen_port,
             ssh_ip_address=new_vpn.ssh_connection_info.ip_address if new_vpn.ssh_connection_info else None,
             ssh_username=new_vpn.ssh_connection_info.username if new_vpn.ssh_connection_info else None,
-            ssh_key=new_vpn.ssh_connection_info.key if new_vpn.ssh_connection_info else None,
-            ssh_key_password=new_vpn.ssh_connection_info.key_password if new_vpn.ssh_connection_info else None,
+            ssh_key=new_vpn.ssh_connection_info.key.get_secret_value() if new_vpn.ssh_connection_info else None,
+            ssh_key_password=key_password,
         )
         response = self.vpn_table.put_item(Item=vpn_dynamo.dict())
         # TODO: Handle failure response
@@ -145,7 +150,7 @@ class DynamoDb(InMemoryDataStore):
             peer_id=peer.peer_id,
             ip_address=peer.ip_address,
             public_key=peer.public_key,
-            private_key=peer.private_key,
+            private_key=peer.private_key.get_secret_value() if peer.private_key else None,
             persistent_keepalive=peer.persistent_keepalive,
             allowed_ips=peer.allowed_ips,
             tags=peer.tags,
