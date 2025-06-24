@@ -20,17 +20,11 @@ class VpnUpdateException(Exception):
 class VpnManager:
     def __init__(self, db_manager: AbstractDatabase):
         self._db_manager = db_manager
-        self._vpn_networks: dict[str, VpnServer] = {}
-        self._initialize_from_db()
-
-    def _initialize_from_db(self):
-        all_vpn = self._db_manager.get_all_vpn()
-        for name, _vpn in all_vpn.items():
-            self._vpn_networks[name] = _vpn
 
     def add_vpn(self, name: str, description: str, vpn_request: VpnPutRequestModel):
         # TODO: Verify the ssh ip_address isn't already being used by another VPN
-        if name in self._vpn_networks:
+        _vpn = self.get_vpn(name)
+        if _vpn is not None:
             raise ValueError(f"VPN with name {name} already exists.")
 
         # Validate the IP address space.  ValueError will be raised if the address space is invalid.
@@ -60,48 +54,44 @@ class VpnManager:
                 f"{vpn_request.wireguard.address_space}."
             )
         self._db_manager.add_vpn(_vpn)
-        self._vpn_networks[_vpn.name] = _vpn
 
     def get_all_vpn(self) -> list[VpnServer]:
-        return [_vpn for _vpn in self._vpn_networks.values()]
+        return [_vpn for _vpn in self._db_manager.get_all_vpn().values()]
 
     def get_vpn(self, name: str) -> VpnServer | None:
-        if name not in self._vpn_networks:
-            return None
-        return self._vpn_networks[name]
+        return self._db_manager.get_vpn(name)
 
     def remove_vpn(self, name: str):
-        if name in self._vpn_networks:
-            self._vpn_networks[name].peers.clear()
+        _vpn = self.get_vpn(name)
+        if _vpn is not None:
+            _vpn.peers.clear()
             self._db_manager.delete_vpn(name)
-            del self._vpn_networks[name]
 
     def get_peers_by_ip(self, vpn_name: str, ip_address: str) -> Peer | None:
-        if vpn_name not in self._vpn_networks:
+        _vpn = self.get_vpn(vpn_name)
+        if _vpn is None:
             return None
-
-        _vpn = self._vpn_networks[vpn_name]
-        for peer in _vpn.peers:
-            if ip_address == peer.ip_address:
-                return peer
+        else:
+            for peer in _vpn.peers:
+                if ip_address == peer.ip_address:
+                    return peer
         return None
 
     def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[Peer]:
         matching_tags = []
-        if vpn_name not in self._vpn_networks:
+        _vpn = self.get_vpn(vpn_name)
+        if _vpn is None:
             return []
-
-        _vpn = self._vpn_networks[vpn_name]
-        for peer in _vpn.peers:
-            if tag in peer.tags:
-                matching_tags.append(peer)
+        else:
+            for peer in _vpn.peers:
+                if tag in peer.tags:
+                    matching_tags.append(peer)
         return matching_tags
 
     def delete_peer(self, vpn_name: str, ip_address: str):
-        if vpn_name not in self._vpn_networks:
+        _vpn = self.get_vpn(vpn_name)
+        if _vpn is None:
             return
-
-        _vpn = self._vpn_networks[vpn_name]
         peer = self.get_peers_by_ip(vpn_name, ip_address)
         if peer:
             _vpn.peers.remove(peer)
@@ -113,7 +103,7 @@ class VpnManager:
 
     def import_peers(self, vpn_name: str) -> list[Peer]:
         # This downloads the wireguard server config and extracts the data.
-        _vpn = self._vpn_networks[vpn_name]
+        _vpn = self.get_vpn(vpn_name)
         wg_config_data = dump_interface_config(_vpn.interface, _vpn.ssh_connection_info)
         if isinstance(wg_config_data, str):
             raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
