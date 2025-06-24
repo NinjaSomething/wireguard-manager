@@ -199,3 +199,21 @@ def import_vpn_peers(vpn_name: str) -> list[PeerModel]:
     except VpnUpdateException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return [peer.to_model() for peer in added_peers]
+
+
+@peer_router.put("/vpn/{vpn_name}/peer/{ip_address}/tag/{tag}", tags=["peers"], response_model=PeerModel)
+def add_tag_to_peer(vpn_name: str, ip_address: str, tag: str) -> PeerModel:
+    """Add a tag to a peer."""
+    vpn_manager = peer_router.vpn_manager
+    validate_peer_exists(vpn_name, ip_address, vpn_manager)
+    vpn_manager.add_tag_to_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
+    return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+
+
+@peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}/tag/{tag}", tags=["peers"], response_model=PeerModel)
+def delete_tag_from_peer(vpn_name: str, ip_address: str, tag: str) -> PeerModel:
+    """Remove a tag from a peer."""
+    vpn_manager = peer_router.vpn_manager
+    validate_peer_exists(vpn_name, ip_address, vpn_manager)
+    vpn_manager.delete_tag_from_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
+    return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()

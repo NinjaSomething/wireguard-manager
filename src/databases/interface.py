@@ -48,3 +48,18 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
     def get_peers(self, vpn_name: str) -> list[Peer]:
         """Return a list of peers for a given VPN network."""
         pass
+
+    @abc.abstractmethod
+    def get_peer(self, vpn_name: str, peer_ip: str) -> Peer:
+        """Return a specific peer from the database.  If the peer does not exist, return None."""
+        pass
+
+    @abc.abstractmethod
+    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
+        """Add a tag to a peer."""
+        pass
+
+    @abc.abstractmethod
+    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
+        """Delete tag from a peer."""
+        pass
