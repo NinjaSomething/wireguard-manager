@@ -11,22 +11,32 @@ from vpn_manager.ssh import remove_peer as ssh_remove_peer
 from vpn_manager.ssh import SshException
 from vpn_manager.ssh import generate_wireguard_keys
 from vpn_manager import VpnUpdateException
+from interfaces.vpn import validate_vpn_exists
 
 
 log = logging.getLogger(__name__)
 peer_router = WgAPIRouter()
 
 
+def validate_peer_exists(vpn_name: str, ip_address: str, vpn_manager) -> None:
+    """
+    Validate that a peer exists within the given vpn.
+    Raises HTTPException if the peer does not exist.
+    """
+    validate_vpn_exists(vpn_name, vpn_manager)
+    if not vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address):
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"No peer with IP {ip_address} was found in VPN {vpn_name}",
+        )
+
+
 @peer_router.get("/vpn/{vpn_name}/peers", tags=["peers"], response_model=list[PeerModel])
 def get_peers(vpn_name: str) -> Response:
     """Get all the peers for a given VPN."""
     vpn_manager = peer_router.vpn_manager
+    validate_vpn_exists(vpn_name, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
-    if not vpn:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"An existing WireGuard interface using this configuration could not be found: {vpn_name}",
-        )
     return vpn.peers.to_model()
 
 
@@ -34,13 +44,8 @@ def get_peers(vpn_name: str) -> Response:
 def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerModel:
     """Add a new peer to a VPN."""
     vpn_manager = peer_router.vpn_manager
+    validate_vpn_exists(vpn_name, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
-    if not vpn:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"An existing WireGuard interface using this configuration could not be found: {vpn_name}",
-        )
-
     # Assign an IP address if not provided
     if peer.ip_address is None:
         peer.ip_address = vpn.get_next_available_ip()
@@ -121,40 +126,18 @@ def delete_peer(vpn_name: str, ip_address: str) -> Response:
 def get_peer(vpn_name: str, ip_address: str) -> PeerModel:
     """Return the peer with the given IP address on a given VPN."""
     vpn_manager = peer_router.vpn_manager
-    vpn = vpn_manager.get_vpn(vpn_name)
-    if not vpn:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"An existing WireGuard interface using this configuration could not be found: {vpn_name}",
-        )
-    peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
-
-    if peer is not None:
-        return peer.to_model()
-    else:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"No peer with IP {ip_address} was found in VPN {vpn_name}",
-        )
+    validate_peer_exists(vpn_name, ip_address, vpn_manager)
+    return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
 
 
 @peer_router.get("/vpn/{vpn_name}/peer/{ip_address}/config", tags=["peers"], response_class=PlainTextResponse)
 def get_peer_wg_config(vpn_name: str, ip_address: str):
     """Return the wireguard configuration for a peer on a given VPN."""
     vpn_manager = peer_router.vpn_manager
-    vpn = vpn_manager.get_vpn(vpn_name)
-    if not vpn:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"An existing WireGuard interface using this configuration could not be found: {vpn_name}",
-        )
-    peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
-    if peer is None:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"No peer with IP {ip_address} was found in VPN {vpn_name}",
-        )
+    validate_peer_exists(vpn_name, ip_address, vpn_manager)
 
+    vpn = vpn_manager.get_vpn(vpn_name)
+    peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
     response = f"""[Interface]
 Address = {peer.ip_address}
 PrivateKey = {peer.private_key if peer.private_key else "[INSERT_PRIVATE_KEY]"}
@@ -171,12 +154,7 @@ PersistentKeepalive = {peer.persistent_keepalive}"""
 def get_peer_by_tag(vpn_name: str, tag: str) -> list[PeerModel]:
     """Return the peers with the given tag on a given VPN."""
     vpn_manager = peer_router.vpn_manager
-    vpn = vpn_manager.get_vpn(vpn_name)
-    if not vpn:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"An existing WireGuard interface using this configuration could not be found: {vpn_name}",
-        )
+    validate_vpn_exists(vpn_name, vpn_manager)
     peers = vpn_manager.get_peers_by_tag(vpn_name=vpn_name, tag=tag)
     return [peer.to_model() for peer in peers]
 
@@ -187,13 +165,9 @@ def get_peer_by_tag(vpn_name: str, tag: str) -> list[PeerModel]:
 def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerModel:
     """Generate new WireGuard keys for a peer."""
     vpn_manager = peer_router.vpn_manager
+    validate_peer_exists(vpn_name, ip_address, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
     peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
-    if not peer:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"An existing WireGuard interface using this configuration could not be found: {vpn_name}",
-        )
 
     if vpn.ssh_connection_info is not None:
         ssh_remove_peer(vpn, peer)
@@ -211,12 +185,8 @@ def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerModel:
 def import_vpn_peers(vpn_name: str) -> list[PeerModel]:
     """This imports peers from the WireGuard VPN into this service."""
     vpn_manager = peer_router.vpn_manager
+    validate_vpn_exists(vpn_name, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
-    if not vpn:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"The wireguard VPN was not found: {vpn_name}",
-        )
 
     if vpn.ssh_connection_info is None:
         raise HTTPException(
