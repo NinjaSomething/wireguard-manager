@@ -6,14 +6,14 @@ access to the VPN.
 
 ## Wireguard VPN Server
 Start by adding a Wireguard VPN server.  When you do this give the VPN a unique name. If you include 
-an SSH key, the Wireguard Manager will automatically manage changes to the clients on the VPN server.  If you do not 
-include an SSH key, you can add clients to the Wireguard Manager, and tag them with meta-data, but you will need to 
-manually manage changes to the clients on the wireguard server yourself.
+the approproiate connection information (E.g. An SSH key), the Wireguard Manager will automatically manage changes to the 
+clients on the VPN server.  If you do not include connection information, you can still add clients to the Wireguard Manager, 
+and tag them with meta-data, but you will need to manually manage changes to the clients on the wireguard server yourself.
 
 The Wireguard Manager has an endpoint for importing peers from the wireguard server into the Manager.  This is a quick way
 to import existing peers into the manager.  All imported peers will be tagged with 'imported'.
 
-Removing a server from the manager will not change anything on the wireguard server itself.  
+Removing a server from the Wireguard Manager will not change anything on the wireguard server itself.
 
 ## Wireguard Client
 The Wireguard Manager has endpoints for adding, removing, and listing clients.  When you add a client, you can also tag it 
@@ -25,3 +25,4 @@ like.  The current implementation includes the following features:
 * Getting all peers by tag.
 * Getting the wg.conf file for a peer.
 * Generate new public/private keys for a peer.  You will need to update the newly created private key on the peer itself.
+* Add/Remove tags from a peer
