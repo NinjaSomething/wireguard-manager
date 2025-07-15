@@ -1,5 +1,5 @@
 # Serverless Framework
-The serverless framework is what is used to deploy the Wireguard Manager to AWS.  It will automatically create the required
+The serverless framework is used to deploy the Wireguard Manager to AWS.  It will automatically create the required
 DynamoDB tables and the App Runner for the service.
 
 These are the instructions for installing Node.js and the Serverless framework on Ubuntu.
