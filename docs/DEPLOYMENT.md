@@ -20,3 +20,6 @@ serverless deploy --stage prd
 This will use CloudFormation to create all the required resources in AWS.
 * DynamoDB tables
 
+## IMPORTANT NOTE
+These instructions do not deploy the wireguard manager service itself.  Support for this will be added later.  You can find the 
+Docker image in the public repository [here](https://gallery.ecr.aws/g0d6f2g5/wireguard-manager).
