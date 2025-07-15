@@ -39,14 +39,30 @@ aws dynamodb list-tables --endpoint-url http://localhost:8000
 ```
 
 # Run Wireguard Manager Locally
-After that you can start the Wireguard Manger service.
+The following are instructions for how to run the Wireguard manager locally in Docker or from an IDE.
+
+## Option A: Using Docker
+Run this from the [serverless](https://github.com/NinjaSomething/wireguard-manager/tree/master/serverless) directory.  This will start the DynamoDB server and the Wireguard Manager.
 
 ```bash
 docker compose up -d --build
 ```
 
-You can access the API at the following address'http://localhost:5000/docs'.
+## Option B: Using an IDE
+Run the following from the serverless directory.
+```bash
+docker compose up -d dynamodb-local
+```
 
+Configure your IDE to use these parameters
+```
+--uvicorn-host=0.0.0.0
+--uvicorn-port=5000
+--environment=dev
+--dynamodb-endpoint=http://0.0.0.0:8000
+```
 
-For additional local development capabilities of the `serverless-dynamodb` plugin, please refer to the corresponding GitHub repository:
-- https://github.com/raisenational/serverless-dynamodb
+## Access the Swagger API
+There is no 'front-end' interface, but there is a visual Swagger API you can use at the following address 'http://localhost:5000/docs'.
+<img width="1473" height="887" alt="image" src="https://github.com/user-attachments/assets/13894bf9-eb67-4b7e-9152-874a52bac094" />
+
