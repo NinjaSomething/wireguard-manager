@@ -1,10 +1,11 @@
 from typing import Optional
 import ipaddress
-from models.vpn import SshConnectionModel, VpnModel, WireguardRequestModel
+from models.vpn import VpnModel, WireguardRequestModel
+from models.connection import ConnectionModel
 from models.peers import PeerModel
 from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase
-from vpn_manager.ssh import dump_interface_config
+from server_manager import server_manager_factory
 
 
 class VpnServer:
@@ -17,7 +18,7 @@ class VpnServer:
         interface: str,
         public_key: str,
         listen_port: int,
-        ssh_connection_info: SshConnectionModel,
+        connection_info: ConnectionModel,
         peers: PeerList,
         description: Optional[str] = None,
         private_key: Optional[str] = None,
@@ -31,7 +32,7 @@ class VpnServer:
         self._public_key = public_key
         self._private_key = private_key
         self._listen_port = listen_port
-        self._ssh_connection_info = ssh_connection_info
+        self._connection_info = connection_info
         self._peers = peers
 
         # Get a list of all IPs for this subnet
@@ -82,19 +83,20 @@ class VpnServer:
         return self._listen_port
 
     @property
-    def ssh_connection_info(self) -> SshConnectionModel:
-        return self._ssh_connection_info
+    def connection_info(self) -> ConnectionModel:
+        return self._connection_info
 
-    @ssh_connection_info.setter
-    def ssh_connection_info(self, ssh_connection_info: SshConnectionModel):
+    @connection_info.setter
+    def connection_info(self, connection_info: ConnectionModel):
         # Validate the SSH connection info works
-        if ssh_connection_info is not None:
-            wg_config_data = dump_interface_config(self.interface, ssh_connection_info)
+        if connection_info is not None:
+            server_manager = server_manager_factory(connection_info.type)
+            wg_config_data = server_manager.dump_interface_config(self.interface, connection_info)
             if isinstance(wg_config_data, str):
                 raise KeyError(f"SSH information for VPN {self.name} failed: {wg_config_data}")
 
-        self._ssh_connection_info = ssh_connection_info
-        self._database.add_vpn(self)
+        self._connection_info = connection_info
+        self._database.update_connection_info(self.name, connection_info)
 
     @property
     def peers(self) -> list[PeerModel]:
@@ -144,6 +146,6 @@ class VpnServer:
                 private_key=self.private_key,
                 listen_port=self.listen_port,
             ),
-            ssh_connection_info=self.ssh_connection_info,
+            connection_info=self.connection_info,
             peers=self.peers,
         )

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, SecretStr, PrivateAttr, field_serializer
 from typing import Optional, List
-from models.ssh import SshConnectionModel
+from models.connection import ConnectionModel
 
 
 class VpnMetaData(BaseModel):
@@ -41,9 +41,9 @@ class VpnPutRequestModel(BaseModel):
     wireguard: WireguardRequestModel = Field(
         ..., description="This contains all the wireguard configuration for the VPN server"
     )
-    ssh_connection_info: Optional[SshConnectionModel] = Field(
+    connection_info: Optional[ConnectionModel] = Field(
         None,
-        description="This contains all the SSH information required for this service to manage the VPN server. If "
+        description="This contains all the information required for this service to manage the VPN server. If "
         "provided, this service will add and remove peers from the VPN server itself.",
     )
 
@@ -57,6 +57,6 @@ class VpnModel(VpnPutRequestModel, VpnMetaData):
 
     @opaque.setter
     def opaque(self, value: bool) -> None:
-        # here you can implement custom logic, like propagating to children models for example (my case)
         self.wireguard.opaque = value
-        self.ssh_connection_info.opaque = value
+        if self.connection_info is not None:
+            self.connection_info.data.opaque = value
