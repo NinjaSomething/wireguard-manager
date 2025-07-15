@@ -1,15 +1,13 @@
 from __future__ import annotations
 import typing
 from typing import Optional, List, Union
-import codecs
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from cryptography.hazmat.primitives import serialization
 import paramiko
 from io import StringIO
 from models.connection import ConnectionModel
-from models.wg_server import WgServerPeerModel, WgServerModel
+from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 import logging
+from server_manager import ConnectionException, extract_wg_server_config
 from server_manager.interface import AbstractServerManager
 
 if typing.TYPE_CHECKING:
@@ -17,10 +15,6 @@ if typing.TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
-
-
-class SshException(Exception):
-    """Custom exception for SSH errors"""
 
 
 class SshConnection(AbstractServerManager):
@@ -61,96 +55,28 @@ class SshConnection(AbstractServerManager):
             result = f"Failed to SSH into server: {ex}"
         return result
 
-    @staticmethod
-    def extract_wg_server_config(wg_interface, wg_config: List[str]) -> Optional[WgServerModel]:
-        """
-        If dump is specified, then several lines are printed; the first contains in order separated by tab:
-        private-key, public-key, listen-port, fwmark. Subsequent lines are printed for each peer and contain in order separated
-        by tab: public-key, preshared-key, endpoint, allowed-ips, latest-handshake, transfer-rx, transfer-tx,
-        persistent-keepalive.
-        """
-        # Extract the vpn server config
-        private_key, public_key, listen_port, fw_mark = wg_config.pop(0).split("\t")
-        vpn_model = WgServerModel(
-            interface=wg_interface,
-            private_key=private_key,
-            public_key=public_key,
-            listen_port=listen_port,
-            fw_mark=fw_mark,
-        )
-
-        # Extract the peers
-        for line in wg_config:
-            (
-                public_key,
-                preshared_key,
-                endpoint,
-                allowed_ips,
-                latest_handshake,
-                transfer_rx,
-                transfer_tx,
-                persistent_keepalive,
-            ) = line.split("\t")
-            peer = WgServerPeerModel(
-                endpoint=endpoint,
-                public_key=public_key,
-                wg_ip_address=allowed_ips.split("/")[0],
-                preshared_key=preshared_key if preshared_key != "(none)" else None,
-                latest_handshake=latest_handshake,
-                transfer_rx=transfer_rx,
-                transfer_tx=transfer_tx,
-                persistent_keepalive=persistent_keepalive,
-            )
-            vpn_model.peers.append(peer)
-
-        return vpn_model
-
-    @staticmethod
     def dump_interface_config(
-        wg_interface: str, connection_info: ConnectionModel
+        self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
-        """Return the full VPN config"""
+        """Return the full VPN config.  If this returns a string, it is an error message."""
         cmd_to_execute = f"sudo wg show {wg_interface} dump"
-        ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, connection_info)
-        if isinstance(ssh_response, list):
-            result = SshConnection.extract_wg_server_config(wg_interface, ssh_response)
+        wg_dump_response = SshConnection._remote_ssh_command(cmd_to_execute, connection_info)
+        if isinstance(wg_dump_response, list):
+            result = extract_wg_server_config(wg_interface, wg_dump_response)
         else:
-            result = ssh_response
+            result = wg_dump_response
         return result
 
-    @staticmethod
-    def remove_peer(vpn: VpnServer, peer: Peer):
+    def remove_peer(self, vpn: VpnServer, peer: Peer):
+        """Remove a peer from the VPN server"""
         cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssh_response, str):
-            raise SshException(f"Failed to remove peer from vpn: {ssh_response}")
+            raise ConnectionException(f"Failed to remove peer from vpn: {ssh_response}")
 
-    @staticmethod
-    def add_peer(vpn: VpnServer, peer: Peer):
+    def add_peer(self, vpn: VpnServer, peer: Peer):
+        """Add a peer to the VPN server"""
         cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssh_response, str):
-            raise SshException(f"Failed to add peer to vpn: {ssh_response}")
-
-    @staticmethod
-    def generate_wireguard_keys() -> tuple[str, str]:
-        """
-        Generate a new WireGuard key pair
-        :return: (private_key, public_key)
-        """
-        # generate private key
-        private_key = X25519PrivateKey.generate()
-        bytes_ = private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        private_key_str = codecs.encode(bytes_, "base64").decode("utf8").strip()
-
-        # derive public key
-        pubkey = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
-        )
-        public_key_str = codecs.encode(pubkey, "base64").decode("utf8").strip()
-
-        return private_key_str, public_key_str
+            raise ConnectionException(f"Failed to add peer to vpn: {ssh_response}")

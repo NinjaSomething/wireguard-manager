@@ -5,7 +5,7 @@ from models.connection import ConnectionModel
 from models.peers import PeerModel
 from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase
-from server_manager.ssh import SshConnection
+from server_manager import server_manager_factory
 
 
 class VpnServer:
@@ -90,7 +90,8 @@ class VpnServer:
     def connection_info(self, connection_info: ConnectionModel):
         # Validate the SSH connection info works
         if connection_info is not None:
-            wg_config_data = SshConnection.dump_interface_config(self.interface, connection_info)
+            server_manager = server_manager_factory(connection_info.type)
+            wg_config_data = server_manager.dump_interface_config(self.interface, connection_info)
             if isinstance(wg_config_data, str):
                 raise KeyError(f"SSH information for VPN {self.name} failed: {wg_config_data}")
 

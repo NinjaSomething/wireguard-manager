@@ -13,34 +13,19 @@ if typing.TYPE_CHECKING:
 class AbstractServerManager(metaclass=abc.ABCMeta):
     """This is an interface that abstracts away the functionality required to manage the wireguard server itself"""
 
-    @staticmethod
-    @abc.abstractmethod
-    def extract_wg_server_config(wg_interface, wg_config: list[str]) -> WgServerModel | None:
-        pass
-
-    @staticmethod
     @abc.abstractmethod
     def dump_interface_config(
-        wg_interface: str, connection_info: ConnectionModel
+        self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
-        """Return the full VPN config"""
+        """Return the full VPN config.  If this returns a string, it is an error message."""
         pass
 
-    @staticmethod
     @abc.abstractmethod
-    def remove_peer(vpn: VpnServer, peer: Peer):
+    def remove_peer(self, vpn: VpnServer, peer: Peer):
+        """Remove a peer from the VPN server"""
         pass
 
-    @staticmethod
     @abc.abstractmethod
-    def add_peer(vpn: VpnServer, peer: Peer):
-        pass
-
-    @staticmethod
-    @abc.abstractmethod
-    def generate_wireguard_keys() -> tuple[str, str]:
-        """
-        Generate a new WireGuard key pair
-        :return: (private_key, public_key)
-        """
+    def add_peer(self, vpn: VpnServer, peer: Peer):
+        """Add a peer to the VPN server"""
         pass

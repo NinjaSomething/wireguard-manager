@@ -1,11 +1,14 @@
 import ipaddress
+import codecs
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives import serialization
 import logging
 from uuid import uuid4
 from databases.interface import AbstractDatabase
 from vpn_manager.vpn import VpnServer
 from vpn_manager.peers import PeerList, Peer
 from models.vpn import VpnPutRequestModel
-from server_manager.ssh import SshConnection
+from server_manager import server_manager_factory
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +39,8 @@ class VpnManager:
 
         # Validate the connection info works
         if vpn_request.connection_info is not None:
-            wg_config_data = SshConnection.dump_interface_config(
+            server_manager = server_manager_factory(vpn_request.connection_info.type)
+            wg_config_data = server_manager.dump_interface_config(
                 vpn_request.wireguard.interface, vpn_request.connection_info
             )
             if isinstance(wg_config_data, str):
@@ -96,23 +100,44 @@ class VpnManager:
         return matching_tags
 
     def delete_peer(self, vpn_name: str, ip_address: str):
-        _vpn = self.get_vpn(vpn_name)
-        if _vpn is None:
-            return
         peer = self.get_peers_by_ip(vpn_name, ip_address)
         if peer:
-            _vpn.peers.remove(peer)
+            self._db_manager.delete_peer(vpn_name, peer.to_db_model())
+
+    @staticmethod
+    def generate_wireguard_keys() -> tuple[str, str]:
+        """
+        Generate a new WireGuard key pair
+        :return: (private_key, public_key)
+        """
+        # generate private key
+        private_key = X25519PrivateKey.generate()
+        bytes_ = private_key.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        private_key_str = codecs.encode(bytes_, "base64").decode("utf8").strip()
+
+        # derive public key
+        pubkey = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+        )
+        public_key_str = codecs.encode(pubkey, "base64").decode("utf8").strip()
+
+        return private_key_str, public_key_str
 
     def generate_new_peer_keys(self, vpn_name: str, peer: Peer):
         self._db_manager.delete_peer(vpn_name, peer.to_db_model())
-        peer.private_key, peer.public_key = SshConnection.generate_wireguard_keys()
+        peer.private_key, peer.public_key = self.generate_wireguard_keys()
         self._db_manager.add_peer(vpn_name, peer.to_db_model())
         return peer
 
     def import_peers(self, vpn_name: str) -> list[Peer]:
         # This downloads the wireguard server config and extracts the data.
         _vpn = self.get_vpn(vpn_name)
-        wg_config_data = SshConnection.dump_interface_config(_vpn.interface, _vpn.connection_info)
+        server_manager = server_manager_factory(_vpn.connection_info.type)
+        wg_config_data = server_manager.dump_interface_config(_vpn.interface, _vpn.connection_info)
         if isinstance(wg_config_data, str):
             raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
 
