@@ -1,4 +1,4 @@
-## Deploy to Staging or Production
+## Deploy Staging/Production to AWS
 This is a guide for deploying the Wireguard Manager to AWS using the Serverless framework.
 
 Ensure Node.js and the Serverless framework are installed on your system. You can follow the instructions [here](SETUP.md).
