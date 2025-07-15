@@ -1,6 +1,5 @@
 import boto3
 from typing import Optional
-from copy import deepcopy
 
 from pydantic import BaseModel
 from models.vpn import VpnModel, WireguardRequestModel
