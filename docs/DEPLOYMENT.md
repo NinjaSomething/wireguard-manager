@@ -6,7 +6,8 @@ Ensure Node.js and the Serverless framework are installed on your system. You ca
 You will need to create an AWS IAM policy and attach it to any user that will deploy the service.  The policy can be found
 [here](aws_policy.json).
 
-To deploy the wireguard-manager service to staging (stg) or production (prd) to AWS, you can use the following command:
+To deploy the wireguard-manager service to staging (stg) or production (prd) to AWS, you can use the following command from 
+the [serverless directory](https://github.com/NinjaSomething/wireguard-manager/tree/master/serverless):
 
 ```bash
 serverless deploy --stage stg
@@ -18,4 +19,4 @@ serverless deploy --stage prd
 
 This will use CloudFormation to create all the required resources in AWS.
 * DynamoDB tables
-* App Runner service
+
