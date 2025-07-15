@@ -13,7 +13,7 @@ pre-commit install
 ```
 
 ## Initial Service Setup
-These instructions only need to be done once.  This will create the required tables in DynamoDB.
+These instructions only need to be done once and should be run from the [serverless](https://github.com/NinjaSomething/wireguard-manager/tree/master/serverless) directory.  This will create the required tables in DynamoDB.
 
 ### Run DynamoDB Locally
 Run the DynamoDB local docker container using the provided docker-compose.yml under the `/serverless' directory.  This will
