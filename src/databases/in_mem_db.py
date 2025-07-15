@@ -1,6 +1,7 @@
 from databases.interface import AbstractDatabase
 from models.vpn import VpnModel, WireguardRequestModel
 from models.peers import PeerDbModel
+from models.connection import ConnectionModel, ConnectionType
 from vpn_manager.vpn import VpnServer
 from vpn_manager.peers import PeerList, Peer
 
@@ -33,7 +34,7 @@ class InMemoryDataStore(AbstractDatabase):
                 public_key=stored_vpn.wireguard.public_key,
                 private_key=stored_vpn.wireguard.private_key,
                 listen_port=stored_vpn.wireguard.listen_port,
-                ssh_connection_info=stored_vpn.ssh_connection_info,
+                connection_info=stored_vpn.connection_info,
                 peers=peer_list,
             )
             return vpn
@@ -53,7 +54,7 @@ class InMemoryDataStore(AbstractDatabase):
                 private_key=new_vpn.private_key,
                 listen_port=new_vpn.listen_port,
             ),
-            ssh_connection_info=new_vpn.ssh_connection_info,
+            connection_info=new_vpn.connection_info,
         )
         self._vpn_peers[new_vpn.name] = []
 
@@ -106,3 +107,7 @@ class InMemoryDataStore(AbstractDatabase):
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag in peer.tags:
             peer.tags.remove(tag)
+
+    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
+        """Update the connection info"""
+        self._vpn_networks[vpn_name].connection_info = connection_info

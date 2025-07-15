@@ -6,10 +6,7 @@ from models.peers import PeerModel, PeerRequestModel
 from vpn_manager.peers import Peer
 import logging
 from interfaces.custom_router import WgAPIRouter
-from vpn_manager.ssh import add_peer as ssh_add_peer
-from vpn_manager.ssh import remove_peer as ssh_remove_peer
-from vpn_manager.ssh import SshException
-from vpn_manager.ssh import generate_wireguard_keys
+from server_manager.ssh import SshConnection, SshException
 from vpn_manager import VpnUpdateException
 from interfaces.vpn import validate_vpn_exists
 
@@ -55,7 +52,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerModel:
 
     if peer.public_key is None:
         # Generate the key-pair
-        peer.private_key, peer.public_key = generate_wireguard_keys()
+        peer.private_key, peer.public_key = SshConnection.generate_wireguard_keys()
 
     for existing_peer in vpn.peers:
         # Verify the IP address is not already in use on this VPN
@@ -98,9 +95,9 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerModel:
         allowed_ips=peer.allowed_ips,
         tags=peer.tags,
     )
-    if vpn.ssh_connection_info is not None:
+    if vpn.connection_info is not None:
         try:
-            ssh_add_peer(vpn, new_peer)
+            SshConnection.add_peer(vpn, new_peer)
         except SshException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
     vpn.peers.append(new_peer)
@@ -115,9 +112,9 @@ def delete_peer(vpn_name: str, ip_address: str) -> Response:
     vpn = vpn_manager.get_vpn(vpn_name)
     peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
     if peer is not None:
-        if vpn.ssh_connection_info is not None:
+        if vpn.connection_info is not None:
             try:
-                ssh_remove_peer(vpn, peer)
+                SshConnection.remove_peer(vpn, peer)
             except SshException as ex:
                 raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
         vpn_manager.delete_peer(vpn_name, ip_address)
@@ -150,7 +147,7 @@ PrivateKey = {peer.private_key.get_secret_value() if peer.private_key else "[INS
 [Peer]
 PublicKey = {vpn.public_key}
 AllowedIPs = {peer.allowed_ips}
-Endpoint = {vpn.ssh_connection_info.ip_address}:{vpn.listen_port}
+Endpoint = {vpn.connection_info.ip_address}:{vpn.listen_port}
 PersistentKeepalive = {peer.persistent_keepalive}"""
     return response
 
@@ -177,13 +174,13 @@ def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerModel:
     vpn = vpn_manager.get_vpn(vpn_name)
     peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
 
-    if vpn.ssh_connection_info is not None:
-        ssh_remove_peer(vpn, peer)
+    if vpn.connection_info is not None:
+        SshConnection.remove_peer(vpn, peer)
 
     vpn_manager.generate_new_peer_keys(vpn_name, peer)
-    if vpn.ssh_connection_info is not None:
+    if vpn.connection_info is not None:
         try:
-            ssh_add_peer(vpn, peer)
+            SshConnection.add_peer(vpn, peer)
         except SshException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
     return peer.to_model()
@@ -196,7 +193,7 @@ def import_vpn_peers(vpn_name: str) -> list[PeerModel]:
     validate_vpn_exists(vpn_name, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
 
-    if vpn.ssh_connection_info is None:
+    if vpn.connection_info is None:
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"SSH connection information is not found for VPN {vpn_name}",

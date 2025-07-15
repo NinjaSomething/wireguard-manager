@@ -3,9 +3,10 @@ import abc
 import typing
 
 if typing.TYPE_CHECKING:
-    from models.vpn import PeerModel
-    from vpn import VpnServer
-    from peers import Peer
+    from models.peers import PeerModel
+    from vpn_manager.vpn import VpnServer
+    from vpn_manager.peers import Peer
+    from models.connection import ConnectionModel
 
 
 class AbstractDatabase(metaclass=abc.ABCMeta):
@@ -62,4 +63,9 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete tag from a peer."""
+        pass
+
+    @abc.abstractmethod
+    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
+        """Update the connection info"""
         pass

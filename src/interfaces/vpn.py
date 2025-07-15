@@ -6,7 +6,8 @@ from setuptools.windows_support import hide_file
 
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnModel, VpnPutRequestModel
-from models.ssh import SshConnectionModel
+from models.connection import build_connection_model
+from models.peers import PeerModel
 from vpn_manager import VpnUpdateException
 import logging
 
@@ -42,7 +43,7 @@ def add_vpn(name: str, vpn: VpnPutRequestModel, description: Optional[str] = "")
     vpn_manager = vpn_router.vpn_manager
     try:
         vpn_manager.add_vpn(name, description, vpn)
-        if vpn.ssh_connection_info:
+        if vpn.connection_info:
             #  Keep the manager aligned with the wireguard server.  Import existing peers.
             try:
                 vpn_manager.import_peers(name)
@@ -55,21 +56,27 @@ def add_vpn(name: str, vpn: VpnPutRequestModel, description: Optional[str] = "")
     return Response(status_code=HTTPStatus.OK)
 
 
-@vpn_router.put("/vpn/{name}/ssh-connection-info", tags=["vpn"])
-def update_ssh(name: str, ssh_connection_info: SshConnectionModel) -> Response:
+@vpn_router.put("/vpn/{name}/connection-info", tags=["vpn"])
+def update_ssh(name: str, connection_info: dict) -> list[PeerModel]:
     """
     Update the SSH connection information for a VPN server.  This is used to connect to the VPN server to add and
-    remove peers.
+    remove peers.  This will automatically sync peers on the wireguard server into the wireguard manager.
     """
     # TODO: Add peers to the VPN that exist in the manager but not on the wg server
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    vpn.ssh_connection_info = ssh_connection_info
-    return Response(status_code=HTTPStatus.OK)
+    vpn.connection_info = build_connection_model(connection_info)
+
+    # Import peers on the wireguard server automatically
+    try:
+        added_peers = vpn_manager.import_peers(name)
+    except VpnUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
+    return [peer.to_model() for peer in added_peers]
 
 
-@vpn_router.delete("/vpn/{name}/ssh-connection-info", tags=["vpn"])
+@vpn_router.delete("/vpn/{name}/connection-info", tags=["vpn"])
 def remove_ssh(name: str) -> Response:
     """
     Delete the SSH connection information for a VPN server.  This service will no longer manage the clients on the VPN server.
@@ -77,7 +84,7 @@ def remove_ssh(name: str) -> Response:
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    vpn.ssh_connection_info = None
+    vpn.connection_info = None
     return Response(status_code=HTTPStatus.OK)
 
 

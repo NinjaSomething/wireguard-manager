@@ -5,8 +5,7 @@ from databases.interface import AbstractDatabase
 from vpn_manager.vpn import VpnServer
 from vpn_manager.peers import PeerList, Peer
 from models.vpn import VpnPutRequestModel
-from vpn_manager.ssh import generate_wireguard_keys
-from vpn_manager.ssh import dump_interface_config
+from server_manager.ssh import SshConnection
 
 log = logging.getLogger(__name__)
 
@@ -22,18 +21,26 @@ class VpnManager:
         self._db_manager = db_manager
 
     def add_vpn(self, name: str, description: str, vpn_request: VpnPutRequestModel):
-        # TODO: Verify the ssh ip_address isn't already being used by another VPN
         _vpn = self.get_vpn(name)
         if _vpn is not None:
             raise ValueError(f"VPN with name {name} already exists.")
 
+        for existing_vpn in self.get_all_vpn():
+            if existing_vpn.public_key == vpn_request.wireguard.public_key:
+                raise ValueError(
+                    f"A Wireguard VPN using the public key {vpn_request.wireguard.public_key} already exists."
+                )
+
         # Validate the IP address space.  ValueError will be raised if the address space is invalid.
         ipaddress.ip_network(vpn_request.wireguard.address_space).hosts()
 
-        # Validate the SSH connection info works
-        wg_config_data = dump_interface_config(vpn_request.wireguard.interface, vpn_request.ssh_connection_info)
-        if isinstance(wg_config_data, str):
-            raise KeyError(f"SSH information for VPN {name} failed: {wg_config_data}")
+        # Validate the connection info works
+        if vpn_request.connection_info is not None:
+            wg_config_data = SshConnection.dump_interface_config(
+                vpn_request.wireguard.interface, vpn_request.connection_info
+            )
+            if isinstance(wg_config_data, str):
+                raise KeyError(f"SSH information for VPN {name} failed: {wg_config_data}")
 
         _vpn = VpnServer(
             database=self._db_manager,
@@ -43,9 +50,9 @@ class VpnManager:
             address_space=vpn_request.wireguard.address_space,
             interface=vpn_request.wireguard.interface,
             public_key=vpn_request.wireguard.public_key,
-            private_key=vpn_request.wireguard.private_key,
+            private_key=vpn_request.wireguard.private_key.get_secret_value(),
             listen_port=vpn_request.wireguard.listen_port,
-            ssh_connection_info=vpn_request.ssh_connection_info,
+            connection_info=vpn_request.connection_info,
             peers=PeerList(name, self._db_manager),
         )
         if vpn_request.wireguard.ip_address not in _vpn.all_ip_addresses:
@@ -98,14 +105,14 @@ class VpnManager:
 
     def generate_new_peer_keys(self, vpn_name: str, peer: Peer):
         self._db_manager.delete_peer(vpn_name, peer.to_db_model())
-        peer.private_key, peer.public_key = generate_wireguard_keys()
+        peer.private_key, peer.public_key = SshConnection.generate_wireguard_keys()
         self._db_manager.add_peer(vpn_name, peer.to_db_model())
         return peer
 
     def import_peers(self, vpn_name: str) -> list[Peer]:
         # This downloads the wireguard server config and extracts the data.
         _vpn = self.get_vpn(vpn_name)
-        wg_config_data = dump_interface_config(_vpn.interface, _vpn.ssh_connection_info)
+        wg_config_data = SshConnection.dump_interface_config(_vpn.interface, _vpn.connection_info)
         if isinstance(wg_config_data, str):
             raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
 
