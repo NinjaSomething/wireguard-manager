@@ -85,8 +85,6 @@ resources:
 
 configValidationMode: error
 
-# The sections below are used for development
-
 plugins:
   - serverless-dynamodb
 
