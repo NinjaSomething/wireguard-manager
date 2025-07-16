@@ -25,6 +25,7 @@ def mock_vpn_table(serverless_configuration):
         vpn_table = conn.create_table(**table_config)
         yield vpn_table
 
+
 @pytest.fixture
 def mock_peer_table(serverless_configuration):
     with mock_aws():
