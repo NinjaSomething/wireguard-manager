@@ -19,6 +19,9 @@ app = FastAPI(
     title="Wireguard Manager",
     description="API for managing wireguard clients",
 )
+routers = [vpn_router, peer_router]
+for router in routers:
+    app.include_router(router)
 
 
 @app.get("/", tags=["wg-manager"])
@@ -76,7 +79,6 @@ if __name__ == "__main__":
     )
     vpn_manager = VpnManager(db_manager=dynamo_db)
 
-    routers = [vpn_router, peer_router]
     for router in routers:
         router.vpn_manager = vpn_manager
         app.include_router(router)
