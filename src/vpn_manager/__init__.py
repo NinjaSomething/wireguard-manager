@@ -7,7 +7,7 @@ from uuid import uuid4
 from databases.interface import AbstractDatabase
 from vpn_manager.vpn import VpnServer
 from vpn_manager.peers import PeerList, Peer
-from models.vpn import VpnPutRequestModel
+from models.vpn import VpnPutModel
 from server_manager import server_manager_factory
 
 log = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class VpnManager:
     def __init__(self, db_manager: AbstractDatabase):
         self._db_manager = db_manager
 
-    def add_vpn(self, name: str, description: str, vpn_request: VpnPutRequestModel):
+    def add_vpn(self, name: str, description: str, vpn_request: VpnPutModel):
         _vpn = self.get_vpn(name)
         if _vpn is not None:
             raise ValueError(f"VPN with name {name} already exists.")
@@ -54,7 +54,7 @@ class VpnManager:
             address_space=vpn_request.wireguard.address_space,
             interface=vpn_request.wireguard.interface,
             public_key=vpn_request.wireguard.public_key,
-            private_key=vpn_request.wireguard.private_key.get_secret_value(),
+            private_key=vpn_request.wireguard.private_key,
             listen_port=vpn_request.wireguard.listen_port,
             connection_info=vpn_request.connection_info,
             peers=PeerList(name, self._db_manager),

@@ -5,7 +5,7 @@ from typing import Optional
 from setuptools.windows_support import hide_file
 
 from interfaces.custom_router import WgAPIRouter
-from models.vpn import VpnModel, VpnPutRequestModel
+from models.vpn import VpnResponseModel, VpnPutModel
 from models.connection import build_connection_model
 from models.peers import PeerModel
 from vpn_manager import VpnUpdateException
@@ -25,18 +25,18 @@ def validate_vpn_exists(name: str, vpn_manager) -> None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=f"VPN with name {name} does not exist.")
 
 
-@vpn_router.get("/vpn", tags=["vpn"], response_model=list[VpnModel])
-def get_all_vpns(hide_secrets: bool = True) -> list[VpnModel]:
+@vpn_router.get("/vpn", tags=["vpn"], response_model=list[VpnResponseModel])
+def get_all_vpns(hide_secrets: bool = True) -> list[VpnResponseModel]:
     """Get all the VPN servers managed by this service."""
     vpn_manager = vpn_router.vpn_manager
-    vpn_models = [vpn.to_model() for vpn in vpn_manager.get_all_vpn()]
+    vpn_models = [VpnResponseModel(**vpn.to_model().model_dump()) for vpn in vpn_manager.get_all_vpn()]
     for vpn_model in vpn_models:
         vpn_model.opaque = hide_secrets
     return vpn_models
 
 
 @vpn_router.put("/vpn/{name}", tags=["vpn"])
-def add_vpn(name: str, vpn: VpnPutRequestModel, description: Optional[str] = "") -> Response:
+def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Response:
     """
     Add an existing VPN to the Wireguard Manager.  When this is done, clients can be added to the VPN using this service.
     """
@@ -99,11 +99,11 @@ def delete_vpn(name: str) -> Response:
     return Response(status_code=HTTPStatus.OK)
 
 
-@vpn_router.get("/vpn/{name}", tags=["vpn"], response_model=VpnModel)
-def get_vpn(name: str, hide_secrets: bool = True) -> VpnModel:
+@vpn_router.get("/vpn/{name}", tags=["vpn"], response_model=VpnResponseModel)
+def get_vpn(name: str, hide_secrets: bool = True) -> VpnResponseModel:
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    vpn_model = vpn.to_model()
+    vpn_model = VpnResponseModel(**vpn.to_model().model_dump())
     vpn_model.opaque = hide_secrets
     return vpn_model

@@ -1,10 +1,9 @@
 from pydantic import BaseModel
 from enum import Enum
-from typing import Any
-from models.ssh import SshConnectionModel
+from models.ssh import SshConnectionModel, SshConnectionResponseModel
 
 """
-This module contains pydantic modules for how the wireguard manager should manage (add/remove peers) from the 
+This module contains pydantic modules for how the wireguard manager should manage (add/remove peers) from the
 wireguard server
 """
 
@@ -21,7 +20,16 @@ class ConnectionModel(BaseModel):
     """
 
     type: ConnectionType
-    data: SshConnectionModel | Any
+    data: SshConnectionModel
+
+
+class ConnectionResponseModel(BaseModel):
+    """
+    This model includes all the information required to connect to the wireguard server.  The data field is generic.
+    """
+
+    type: ConnectionType
+    data: SshConnectionResponseModel
 
 
 def build_connection_model(connection_info: dict | None) -> ConnectionModel | None:

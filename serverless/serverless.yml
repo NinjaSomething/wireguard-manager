@@ -1,7 +1,5 @@
 service: wireguard-manager
-
 frameworkVersion: '3'
-
 provider:
   name: aws
   stage: ${opt:stage, 'stg'}
@@ -87,7 +85,6 @@ configValidationMode: error
 
 plugins:
   - serverless-dynamodb
-
 custom:
   dynamodb:
     stages:
