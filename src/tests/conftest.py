@@ -12,7 +12,7 @@ from vpn_manager import VpnManager
 # thoroughly test the integration between our infrastructure and code.
 @pytest.fixture(scope="session")
 def serverless_configuration():
-    with open("serverless/serverless.yml", "r") as f:
+    with open("serverless-v4/serverless.yml", "r") as f:
         config = yaml.safe_load(f)
     return config["resources"]["Resources"]
 
