@@ -17,7 +17,7 @@ These instructions only need to be done once and should be run from the [serverl
 
 ### Run DynamoDB Locally
 Run the DynamoDB local docker container using the provided docker-compose.yml under the `/serverless' directory.  This will
-create a local DynamoDB instance that you can use for development and testing.  
+create a local DynamoDB instance that you can use for development and testing.
 
 ```bash
 docker compose up -d dynamodb-local
@@ -25,7 +25,7 @@ docker compose up -d dynamodb-local
 
 ### Deploy DynamoDB Tables
 
-Next you will deploy the DynamoDB tables using the Serverless framework.  This will create the required tables in the 
+Next you will deploy the DynamoDB tables using the Serverless framework.  This will create the required tables in the
 local DynamoDB instance.
 
 ```bash
@@ -65,4 +65,3 @@ Configure your IDE to use these parameters
 ## Access the Swagger API
 There is no 'front-end' interface, but there is a visual Swagger API you can use at the following address 'http://localhost:5000/docs'.
 <img width="1473" height="887" alt="image" src="https://github.com/user-attachments/assets/13894bf9-eb67-4b7e-9152-874a52bac094" />
-
