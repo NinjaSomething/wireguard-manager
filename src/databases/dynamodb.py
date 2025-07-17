@@ -2,7 +2,7 @@ import boto3
 from typing import Optional
 
 from pydantic import BaseModel
-from models.vpn import VpnModel, WireguardRequestModel
+from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionType
 from vpn_manager.vpn import VpnServer
@@ -69,7 +69,7 @@ class DynamoDb(InMemoryDataStore):
             vpn = VpnModel(
                 name=dynamo_vpn["name"],
                 description=dynamo_vpn["description"],
-                wireguard=WireguardRequestModel(
+                wireguard=WireguardModel(
                     ip_address=dynamo_vpn["wireguard_ip_address"],
                     address_space=dynamo_vpn["wireguard_subnet"],
                     interface=dynamo_vpn["wireguard_interface"],

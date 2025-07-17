@@ -36,9 +36,7 @@ class SshConnection(AbstractServerManager):
             ssh.connect(
                 ssh_connection_info.ip_address,
                 username=ssh_connection_info.username,
-                pkey=paramiko.RSAKey.from_private_key(
-                    StringIO(ssh_connection_info.key.get_secret_value()), password=key_password
-                ),
+                pkey=paramiko.RSAKey.from_private_key(StringIO(ssh_connection_info.key), password=key_password),
             )
             ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd, timeout=10)
             # TODO: Add support for other corner-cases
