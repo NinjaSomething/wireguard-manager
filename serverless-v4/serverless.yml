@@ -75,6 +75,15 @@ resources: # CloudFormation template syntax
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: 'wireguard-manager-peers-${self:provider.stage}'
+    AppRunnerVpcConnector:
+      Type: AWS::AppRunner::VpcConnector
+      Properties:
+        VpcConnectorName: !Sub "${AWS::StackName}-connector"
+        Subnets:
+          - subnet-0036b48ca860d8384 # ← your private subnet IDs
+          - subnet-07f3e513061047c31
+        SecurityGroups:
+          - sg-00a7b142533f3d335 # ← SG allowing outbound to DB port
     WireguardManagerAppRunner:
       Type: AWS::AppRunner::Service
       Properties:
@@ -89,8 +98,11 @@ resources: # CloudFormation template syntax
         InstanceConfiguration:
           InstanceRoleArn: arn:aws:iam::${aws:accountId}:role/wireguard_manager_role
         NetworkConfiguration:
+          EgressConfiguration:
+            EgressType: VPC
+            VpcConnectorArn: !Ref AppRunnerVpcConnector
           IngressConfiguration:
-            IsPubliclyAccessible: True
+            IsPubliclyAccessible: False
           IpAddressType: IPV4
         ObservabilityConfiguration:
           ObservabilityEnabled: False
@@ -111,8 +123,6 @@ resources: # CloudFormation template syntax
                   Value: ${self:provider.region}
             ImageIdentifier: public.ecr.aws/g0d6f2g5/wireguard-manager:0.0.1
             ImageRepositoryType: ECR_PUBLIC
-
-
 configValidationMode: error
 # The sections below are used for development
 plugins:
