@@ -1,5 +1,5 @@
 from databases.interface import AbstractDatabase
-from models.vpn import VpnModel, WireguardRequestModel
+from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionModel, ConnectionType
 from vpn_manager.vpn import VpnServer
@@ -46,7 +46,7 @@ class InMemoryDataStore(AbstractDatabase):
         self._vpn_networks[new_vpn.name] = VpnModel(
             name=new_vpn.name,
             description=new_vpn.description,
-            wireguard=WireguardRequestModel(
+            wireguard=WireguardModel(
                 ip_address=new_vpn.ip_address,
                 address_space=new_vpn.address_space,
                 interface=new_vpn.interface,

@@ -1,6 +1,6 @@
 from typing import Optional
 import ipaddress
-from models.vpn import VpnModel, WireguardRequestModel
+from models.vpn import WireguardModel, VpnModel
 from models.connection import ConnectionModel
 from models.peers import PeerModel
 from vpn_manager.peers import PeerList
@@ -138,7 +138,7 @@ class VpnServer:
         return VpnModel(
             name=self.name,
             description=self._description,
-            wireguard=WireguardRequestModel(
+            wireguard=WireguardModel(
                 ip_address=self.ip_address,
                 address_space=self.address_space,
                 interface=self.interface,

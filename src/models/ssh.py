@@ -1,24 +1,18 @@
-from pydantic import BaseModel, Field, SecretStr, PrivateAttr, field_serializer, model_serializer
-from typing import Optional, List
+from pydantic import BaseModel, Field, SecretStr, field_serializer
+from typing import Optional
+from models import OpaqueModel
 
 
 # Models for the SSH class
 class SshConnectionModel(BaseModel):
-    _opaque: bool = PrivateAttr(default=True)
-
     ip_address: str = Field(..., description="The IP address SSH will use to connect to the VPN server")
     username: str = Field(..., description="The SSH username")
+    key: str = Field(..., description="The SSH private key")
+    key_password: Optional[str] = Field(None, description="The password for the SSH private key")
+
+
+class SshConnectionResponseModel(SshConnectionModel, OpaqueModel):
     key: SecretStr = Field(..., description="The SSH private key")
-    key_password: Optional[SecretStr] = Field(None, description="The password for the SSH private key")
-
-    @property
-    def opaque(self):
-        return self._opaque
-
-    @opaque.setter
-    def opaque(self, value: bool) -> None:
-        # here you can implement custom logic, like propagating to children models for example (my case)
-        self._opaque = value
 
     @field_serializer("key")
     @field_serializer("key_password")
