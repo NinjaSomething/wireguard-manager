@@ -1,10 +1,19 @@
 ---
-name: Yaml Lint
-on: [push]   # yamllint disable-line rule:truthy
+name: 'Yamllint GitHub Actions'
+on:
+  - pull_request
 jobs:
-    lintAllTheThings:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v3
-            - name: yaml-lint
-              uses: ibiqlik/action-yamllint@v3
+  yamllint:
+    name: 'Yamllint'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@master
+      - name: 'Yamllint'
+        uses: karancode/yamllint-github-action@master
+        with:
+          yamllint_file_or_dir: '<yaml_file_or_dir>'
+          yamllint_strict: false
+          yamllint_comment: true
+        env:
+          GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
