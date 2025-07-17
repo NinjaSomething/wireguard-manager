@@ -2,8 +2,9 @@
 The serverless framework is used to deploy the Wireguard Manager to AWS.  It will automatically create the required
 DynamoDB tables for the service.
 
-These are the instructions for installing Node.js and the Serverless framework on Ubuntu.
+The default is to use serverless V4, but you can use V3 by updating the package version [here](https://github.com/NinjaSomething/wireguard-manager/blob/master/package.json).
 
+These are the instructions for installing Node.js and the Serverless framework on Ubuntu.
 ```bash
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg
@@ -15,7 +16,5 @@ sudo apt-get update
 sudo apt-get install nodejs -y
 node -v
 
-sudo npm i -g serverless@4.14.3
 npm install
-sudo npm install serverless-dynamodb --save-dev
 ```
