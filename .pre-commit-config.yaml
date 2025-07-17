@@ -1,3 +1,4 @@
+---
 repos:
     - repo: https://github.com/psf/black
       rev: 24.10.0
@@ -6,10 +7,22 @@ repos:
             args: [-l 120]
     - repo: local
       hooks:
-        - id: commit-msg
-          name: Commit Message Hook
-          entry: ./hooks/commit-msg.sh
-          language: script
-          stages: [commit-msg]
+          - id: commit-msg
+            name: Commit Message Hook
+            entry: ./hooks/commit-msg.sh
+            language: script
+            stages: [commit-msg]
+    - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+      rev: 0.2.1 # or other specific tag
+      hooks:
+          - id: yamlfmt
+    - repo: local
+      hooks:
+          - id: yamllint
+            name: yamllint
+            description: This hook runs yamllint.
+            entry: yamllint
+            language: python
+            types: [file, yaml]
 default_language_version:
     python: python3.10
