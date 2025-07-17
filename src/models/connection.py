@@ -3,7 +3,7 @@ from enum import Enum
 from models.ssh import SshConnectionModel, SshConnectionResponseModel
 
 """
-This module contains pydantic modules for how the wireguard manager should manage (add/remove peers) from the 
+This module contains pydantic modules for how the wireguard manager should manage (add/remove peers) from the
 wireguard server
 """
 
