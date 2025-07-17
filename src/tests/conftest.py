@@ -3,6 +3,8 @@ import boto3
 import yaml
 from moto import mock_aws
 from environment import Environment
+from databases.dynamodb import DynamoDb
+from vpn_manager import VpnManager
 
 
 # Session-scoped fixture to load the serverless configuration for the infrastructure.
@@ -15,7 +17,7 @@ def serverless_configuration():
     return config["resources"]["Resources"]
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def mock_vpn_table(serverless_configuration):
     with mock_aws():
         table_config = serverless_configuration["WireguardManagerVpnServersTable"]["Properties"]
@@ -26,7 +28,7 @@ def mock_vpn_table(serverless_configuration):
         yield vpn_table
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def mock_peer_table(serverless_configuration):
     with mock_aws():
         table_config = serverless_configuration["WireguardManagerPeersTable"]["Properties"]
@@ -35,3 +37,15 @@ def mock_peer_table(serverless_configuration):
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         peer_table = conn.create_table(**table_config)
         yield peer_table
+
+
+@pytest.fixture
+def mock_vpn_manager():
+    with mock_aws():
+        dynamo_db = DynamoDb(
+            environment=Environment.STAGING,
+            dynamodb_endpoint_url="test-endpoint",
+            aws_region="us-west-2",
+        )
+        vpn_manager = VpnManager(db_manager=dynamo_db)
+    yield vpn_manager
