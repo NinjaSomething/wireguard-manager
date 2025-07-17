@@ -1,64 +1,45 @@
 service: wireguard-manager
-
 frameworkVersion: '4'
-
 provider:
   name: aws
   stage: ${opt:stage, 'stg'}
   region: us-west-2
-
-
 resources: # CloudFormation template syntax
   Resources:
-    WireguardManagerRole:
-      Type: AWS::IAM::Role
-      Properties:
-        RoleName: wireguard_manager_role
-        Path: /
-        AssumeRolePolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service:
-                  - tasks.apprunner.amazonaws.com
-              Action:
-                - sts:AssumeRole
-        Policies:
-          - PolicyDocument: {
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Sid": "VisualEditor0",
-                "Effect": "Allow",
-                "Action": [
-                  "dynamodb:Scan",
-                  "dynamodb:PutItem",
-                  "dynamodb:DeleteItem"
-                ],
-                "Resource": [
-                  "arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*",
-                  "arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*"
-                ]
-              }
-            ]
-            }
-            PolicyName: wireguard_manager_policy
+    #WireguardManagerRole:
+    #    Type: AWS::IAM::Role
+    #    Properties:
+    #        RoleName: wireguard_manager_role
+    #        Path: /
+    #        AssumeRolePolicyDocument:
+    #            Version: '2012-10-17'
+    #            Statement:
+    #                - Effect: Allow
+    #                  Principal:
+    #                      Service:
+    #                          - tasks.apprunner.amazonaws.com
+    #                  Action:
+    #                      - sts:AssumeRole
+    #        Policies:
+    #            - PolicyDocument: {Version: '2012-10-17', Statement: [{Sid: VisualEditor0, Effect: Allow, Action: [dynamodb:Scan, dynamodb:PutItem,
+    #                                dynamodb:DeleteItem], Resource: [arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*,
+    #                                      arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*]}]}
+    #              PolicyName: wireguard_manager_policy
     WireguardManagerKsmKey:
       Type: AWS::KMS::Key
       Properties:
-        Description: 'Wireguard Manager KSM Key'
-        Enabled: True
-        EnableKeyRotation: False
+        Description: Wireguard Manager KSM Key
+        Enabled: true
+        EnableKeyRotation: false
         KeySpec: SYMMETRIC_DEFAULT
         KeyUsage: ENCRYPT_DECRYPT
-        MultiRegion: False
+        MultiRegion: false
         Origin: AWS_KMS
-    WireguardManagerKsmKeyAlias:
-      Type: AWS::KMS::Alias
-      Properties:
-        AliasName: alias/wireguard-manager-kms-${self:provider.stage}
-        TargetKeyId: !Ref WireguardManagerKsmKey
+    #WireguardManagerKsmKeyAlias:
+    #    Type: AWS::KMS::Alias
+    #    Properties:
+    #        AliasName: alias/wireguard-manager-kms-${self:provider.stage}
+    #        TargetKeyId: !Ref WireguardManagerKsmKey
     WireguardManagerVpnServersTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -71,7 +52,7 @@ resources: # CloudFormation template syntax
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: 'wireguard-manager-vpn-servers-${self:provider.stage}'
+        TableName: wireguard-manager-vpn-servers-${self:provider.stage}
     WireguardManagerPeersTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -84,16 +65,11 @@ resources: # CloudFormation template syntax
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: 'wireguard-manager-peers-${self:provider.stage}'
-
-
+        TableName: wireguard-manager-peers-${self:provider.stage}
 configValidationMode: error
-
 # The sections below are used for development
-
 plugins:
   - serverless-dynamodb
-
 custom:
   dynamodb:
     stages:
