@@ -15,8 +15,6 @@ sudo apt-get update
 sudo apt-get install nodejs -y
 node -v
 
-sudo npm i -g serverless@4.14.3
 npm install
-sudo npm install serverless-dynamodb --save-dev
 ```
 
