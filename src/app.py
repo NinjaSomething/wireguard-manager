@@ -81,7 +81,6 @@ if __name__ == "__main__":
 
     for router in routers:
         router.vpn_manager = vpn_manager
-        app.include_router(router)
 
     try:
         uvicorn.run("__main__:app", host=config.uvicorn_host, port=config.uvicorn_port, log_config=None)
