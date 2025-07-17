@@ -3,7 +3,7 @@ services:
   wg-manager:
     container_name: wg-manager
     build:
-      context: ../
+      context: ./
       dockerfile: Dockerfile
     ports:
       - 5000:5000
