@@ -21,8 +21,19 @@ resources: # CloudFormation template syntax
               Action:
                 - sts:AssumeRole
         Policies:
-          - PolicyDocument: {Version: '2012-10-17', Statement: [{Sid: VisualEditor0, Effect: Allow, Action: ['dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:DeleteItem'], Resource: ['arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*', 'arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*']}]}
-            PolicyName: wireguard_manager_policy
+          - PolicyName: wireguard_manager_policy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Sid: VisualEditor0
+                  Effect: Allow
+                  Action:
+                    - dynamodb:Scan
+                    - dynamodb:PutItem
+                    - dynamodb:DeleteItem
+                  Resource:
+                    - arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*
+                    - arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*
     WireguardManagerKsmKey:
       Type: AWS::KMS::Key
       Properties:

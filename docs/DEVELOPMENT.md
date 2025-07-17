@@ -13,11 +13,15 @@ pre-commit install
 ```
 
 ## Initial Service Setup
-These instructions only need to be done once and should be run from the [serverless](https://github.com/NinjaSomething/wireguard-manager/tree/master/serverless) directory.  This will create the required tables in DynamoDB.
+The docker commands should be run from the root project directory, and
+the serverless commands should be run from the desired serverless directory.  The project currently has support for
+both serverless V3 and V4, so you can choose which version you prefer.
+
+These instructions only need to be done once.  This will create the required tables in DynamoDB.
 
 ### Run DynamoDB Locally
-Run the DynamoDB local docker container using the provided docker-compose.yml under the `/serverless' directory.  This will
-create a local DynamoDB instance that you can use for development and testing.
+Run the DynamoDB local docker container using the provided docker-compose.yml under the root project directory.  This
+will create a local DynamoDB instance that you can use for development and testing.
 
 ```bash
 docker compose up -d dynamodb-local
@@ -42,14 +46,14 @@ aws dynamodb list-tables --endpoint-url http://localhost:8000
 The following are instructions for how to run the Wireguard manager locally in Docker or from an IDE.
 
 ## Option A: Using Docker
-Run this from the [serverless](https://github.com/NinjaSomething/wireguard-manager/tree/master/serverless) directory.  This will start the DynamoDB server and the Wireguard Manager.
+Run this from the root project directory.  This will start the DynamoDB server and the Wireguard Manager.
 
 ```bash
 docker compose up -d --build
 ```
 
 ## Option B: Using an IDE
-Run the following from the serverless directory.
+Run the following from the root project directory.
 ```bash
 docker compose up -d dynamodb-local
 ```
