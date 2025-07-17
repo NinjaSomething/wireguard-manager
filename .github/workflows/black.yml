@@ -1,16 +1,13 @@
----
 name: Lint
-
 on: [push]
-
 jobs:
-    lint:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: psf/black@stable
-              with:
-                  options: -l 120 --check --verbose
-                  src: ./src
-                  jupyter: true
-                  version: 24.10.0
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: psf/black@stable
+        with:
+          options: -l 120 --check --verbose
+          src: ./src
+          jupyter: true
+          version: 24.10.0
