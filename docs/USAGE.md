@@ -29,6 +29,5 @@ like.  The current implementation includes the following features:
 
 ## Interface
 The Wireguard Manager is intended to be a backend service, so there isn't currently a user friendly UI.  The service does include
-a visual interface for the API in the form of a Swagger API.  This is useful for development and is often good enough for an
-operations team.
+a visual interface in the form of a FastApi Swagger API.  This is useful for development and is often good enough for an operations team.
 <img width="1473" height="887" alt="image" src="https://github.com/user-attachments/assets/2cb1561a-25aa-4fb9-81f4-ced758aa0ff9" />
