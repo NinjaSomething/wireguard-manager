@@ -6,9 +6,10 @@ from setuptools.windows_support import hide_file
 
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnResponseModel, VpnPutModel
-from models.connection import build_connection_model
+from models.connection import build_connection_model, ConnectionModel
 from models.peers import PeerModel
 from vpn_manager import VpnUpdateException
+from server_manager import ConnectionException
 import logging
 
 
@@ -53,11 +54,13 @@ def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Res
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=f"Failed to add VPN {name}: {ex}")
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except ConnectionException as ex:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     return Response(status_code=HTTPStatus.OK)
 
 
 @vpn_router.put("/vpn/{name}/connection-info", tags=["vpn"])
-def update_ssh(name: str, connection_info: dict) -> list[PeerModel]:
+def update_ssh(name: str, connection_info: ConnectionModel) -> list[PeerModel]:
     """
     Update the SSH connection information for a VPN server.  This is used to connect to the VPN server to add and
     remove peers.  This will automatically sync peers on the wireguard server into the wireguard manager.
@@ -66,11 +69,15 @@ def update_ssh(name: str, connection_info: dict) -> list[PeerModel]:
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    vpn.connection_info = build_connection_model(connection_info)
 
     # Import peers on the wireguard server automatically
     try:
+        vpn.connection_info = build_connection_model(connection_info.model_dump())
         added_peers = vpn_manager.import_peers(name)
+    except KeyError as ex:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except ConnectionException as ex:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except VpnUpdateException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return [peer.to_model() for peer in added_peers]

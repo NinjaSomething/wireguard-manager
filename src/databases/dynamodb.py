@@ -58,29 +58,10 @@ class DynamoDb(InMemoryDataStore):
 
     def _init_vpn_from_db(self):
         """Get existing VPNs from DynamoDb and add them to the in-memory datastore."""
-        response = self.vpn_table.scan()
-        data = response["Items"]
-        while "LastEvaluatedKey" in response:
-            response = self.vpn_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-            data.extend(response["Items"])
-
-        for dynamo_vpn in data:
-            connection_info = build_connection_model(dynamo_vpn["connection_info"])
-            vpn = VpnModel(
-                name=dynamo_vpn["name"],
-                description=dynamo_vpn["description"],
-                wireguard=WireguardModel(
-                    ip_address=dynamo_vpn["wireguard_ip_address"],
-                    address_space=dynamo_vpn["wireguard_subnet"],
-                    interface=dynamo_vpn["wireguard_interface"],
-                    public_key=dynamo_vpn["wireguard_public_key"],
-                    private_key=dynamo_vpn["wireguard_private_key"],
-                    listen_port=dynamo_vpn["wireguard_listen_port"],
-                ),
-                connection_info=connection_info,
-            )
-            self._vpn_networks[dynamo_vpn["name"]] = vpn
-            self._vpn_peers[dynamo_vpn["name"]] = []
+        all_vpns = self.get_all_vpns()
+        for vpn in all_vpns:
+            self._vpn_networks[vpn.name] = vpn
+            self._vpn_peers[vpn.name] = []
 
     def _init_peers_from_db(self):
         """Get existing Peers from DynamoDb and add them to the in-memory datastore."""
@@ -105,11 +86,35 @@ class DynamoDb(InMemoryDataStore):
                 self._vpn_peers[dynamo_peer["vpn_name"]] = []
             self._vpn_peers[dynamo_peer["vpn_name"]].append(peer)
 
+    def get_all_vpns(self) -> list[VpnModel]:
+        """Get all VPN networks from the database."""
+        response = self.vpn_table.scan()
+        data = response["Items"]
+        while "LastEvaluatedKey" in response:
+            response = self.vpn_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+            data.extend(response["Items"])
+
+        all_vpns = []
+        for dynamo_vpn in data:
+            connection_info = build_connection_model(dynamo_vpn["connection_info"])
+            vpn = VpnModel(
+                name=dynamo_vpn["name"],
+                description=dynamo_vpn["description"],
+                wireguard=WireguardModel(
+                    ip_address=dynamo_vpn["wireguard_ip_address"],
+                    address_space=dynamo_vpn["wireguard_subnet"],
+                    interface=dynamo_vpn["wireguard_interface"],
+                    public_key=dynamo_vpn["wireguard_public_key"],
+                    private_key=dynamo_vpn["wireguard_private_key"],
+                    listen_port=dynamo_vpn["wireguard_listen_port"],
+                ),
+                connection_info=connection_info,
+            )
+            all_vpns.append(vpn)
+        return all_vpns
+
     def add_vpn(self, new_vpn: VpnServer):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
-        if new_vpn.connection_info is not None:
-            new_vpn.connection_info.data.opaque = True
-
         vpn_dynamo = VpnDynamoModel(
             name=new_vpn.name,
             description=new_vpn.description,
@@ -123,11 +128,9 @@ class DynamoDb(InMemoryDataStore):
         )
         if new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSH:
             # Get the secret value for the SSH key and password
-            vpn_dynamo.connection_info["data"]["key"] = new_vpn.connection_info.data.key.get_secret_value()
+            vpn_dynamo.connection_info["data"]["key"] = new_vpn.connection_info.data.key
             if new_vpn.connection_info.data.key_password is not None:
-                vpn_dynamo.connection_info["data"][
-                    "key_password"
-                ] = new_vpn.connection_info.data.key_password.get_secret_value()
+                vpn_dynamo.connection_info["data"]["key_password"] = new_vpn.connection_info.data.key_password
 
         response = self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
         # TODO: Handle failure response
@@ -192,9 +195,9 @@ class DynamoDb(InMemoryDataStore):
             connection_info_dict = connection_info.model_dump()
             if connection_info.type == ConnectionType.SSH:
                 # Get the secret value for the SSH key and password
-                connection_info_dict["data"]["key"] = connection_info.data.key.get_secret_value()
+                connection_info_dict["data"]["key"] = connection_info.data.key
                 if connection_info.data.key_password is not None:
-                    connection_info_dict["data"]["key_password"] = connection_info.data.key_password.get_secret_value()
+                    connection_info_dict["data"]["key_password"] = connection_info.data.key_password
 
         super().update_connection_info(vpn_name, connection_info)
         response = self.vpn_table.update_item(

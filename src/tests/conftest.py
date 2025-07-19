@@ -5,6 +5,8 @@ from moto import mock_aws
 from environment import Environment
 from databases.dynamodb import DynamoDb
 from vpn_manager import VpnManager
+from models.wg_server import WgServerModel, WgServerPeerModel
+from tests.mock_ssh_client import MockExecCommand
 
 
 # Session-scoped fixture to load the serverless configuration for the infrastructure.
@@ -40,12 +42,30 @@ def mock_peer_table(serverless_configuration):
 
 
 @pytest.fixture
-def mock_vpn_manager():
+def mock_dynamo_db():
     with mock_aws():
         dynamo_db = DynamoDb(
             environment=Environment.STAGING,
             dynamodb_endpoint_url="test-endpoint",
             aws_region="us-west-2",
         )
-        vpn_manager = VpnManager(db_manager=dynamo_db)
+    yield dynamo_db
+
+
+@pytest.fixture
+def mock_vpn_manager(mock_dynamo_db):
+    vpn_manager = VpnManager(db_manager=mock_dynamo_db)
     yield vpn_manager
+
+
+@pytest.fixture(scope="class")
+def mock_exec_command():
+    """
+    This fixture mocks the SSHClient.exec_command method for testing purposes.  This simulates the SSH commands to the
+    server.  You can use this to add/remove peers, or dump the WireGuard configuration in the expected format.
+    """
+    new_server = WgServerModel(
+        interface="wg0", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"
+    )
+    mock_exec_command = MockExecCommand(server=new_server, peers=[])
+    yield mock_exec_command

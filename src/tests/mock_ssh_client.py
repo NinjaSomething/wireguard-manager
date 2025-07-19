@@ -13,11 +13,21 @@ class MockExecCommand:
     """
 
     def __init__(self, server: WgServerModel, peers: list[WgServerPeerModel] = None):
+        self._connection_failure = False
         self._server = server
         self._peers = peers or []
         self.ssh_stdin = MagicMock()
         self.ssh_stdout = MagicMock()
         self.ssh_stderr = MagicMock()
+
+    @property
+    def server(self) -> WgServerModel:
+        return self._server
+
+    @server.setter
+    def server(self, value: WgServerModel):
+        """This allows the test to change the server model to something different if needed."""
+        self._server = value
 
     def _dump(self):
         """
@@ -76,13 +86,15 @@ class MockExecCommand:
 
     def exec_command(self, command, bufsize=-1, timeout=None, get_pty=False, environment=None):
         self.ssh_stdout.channel.recv_exit_status.return_value = 0
-        if f"wg show {self._server.interface} dump" in command:
+        if f"wg show " in command and "dump" in command:
             dump_dict = parse.parse("sudo wg show {wg_interface} dump", command)
             if dump_dict["wg_interface"] == self._server.interface:
                 self.ssh_stdout.readlines.return_value = self._dump()
             else:
+                # This simulates trying to dump an interface that does not exist.
                 self.ssh_stderr.readlines.return_value = ["Error: Interface not found"]
                 self.ssh_stdout.readlines.return_value = []
+                self.ssh_stdout.channel.recv_exit_status.return_value = 1
         elif "remove" in command and "wg set" in command:
             self._remove_peer(command)
         elif "wg set" in command:
