@@ -35,7 +35,10 @@ class VpnManager:
                 )
 
         # Validate the IP address space.  ValueError will be raised if the address space is invalid.
-        ipaddress.ip_network(vpn_request.wireguard.address_space).hosts()
+        try:
+            ipaddress.ip_network(vpn_request.wireguard.address_space).hosts()
+        except ValueError as ex:
+            raise KeyError(f"Invalid address space {vpn_request.wireguard.address_space} for VPN {name}: {ex}")
 
         # Validate the connection info works
         if vpn_request.connection_info is not None:

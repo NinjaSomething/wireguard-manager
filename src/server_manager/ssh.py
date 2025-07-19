@@ -30,14 +30,18 @@ class SshConnection(AbstractServerManager):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
-            key_password = (
-                ssh_connection_info.key_password.get_secret_value() if ssh_connection_info.key_password else None
-            )
-            ssh.connect(
-                ssh_connection_info.ip_address,
-                username=ssh_connection_info.username,
-                pkey=paramiko.RSAKey.from_private_key(StringIO(ssh_connection_info.key), password=key_password),
-            )
+            try:
+                ssh.connect(
+                    ssh_connection_info.ip_address,
+                    username=ssh_connection_info.username,
+                    pkey=paramiko.RSAKey.from_private_key(
+                        StringIO(ssh_connection_info.key), password=ssh_connection_info.key_password
+                    ),
+                    timeout=30,
+                )
+            except Exception as ex:
+                raise ConnectionException(f"Failed to connect to server via SSH: {ex}")
+
             ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmd, timeout=10)
             # TODO: Add support for other corner-cases
             if ssh_stdout.channel.recv_exit_status() == 0:
