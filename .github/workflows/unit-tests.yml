@@ -1,7 +1,7 @@
 name: Unit Tests
 on: [push]
 jobs:
-  lintAllTheThings:
+  unitTests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
