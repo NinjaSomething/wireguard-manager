@@ -124,3 +124,4 @@ serverless-v4/.serverless/
 serverless-v3/.serverless/
 
 package-lock.json
+junit/
