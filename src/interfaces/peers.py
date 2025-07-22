@@ -50,10 +50,9 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
     if peer.ip_address is None:
         peer.ip_address = vpn.get_next_available_ip()
 
-    if vpn.connection_info:
-        if peer.public_key is None:
-            # Generate the key-pair
-            peer.private_key, peer.public_key = vpn_manager.generate_wireguard_keys()
+    if peer.public_key is None:
+        # Generate the key-pair
+        peer.private_key, peer.public_key = vpn_manager.generate_wireguard_keys()
 
     for existing_peer in vpn.peers:
         # Verify the IP address is not already in use on this VPN
@@ -146,12 +145,12 @@ def get_peer_wg_config(vpn_name: str, ip_address: str):
     peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
     response = f"""[Interface]
 Address = {peer.ip_address}
-PrivateKey = {peer.private_key.get_secret_value() if peer.private_key else "[INSERT_PRIVATE_KEY]"}
+PrivateKey = {peer.private_key if peer.private_key else "[INSERT_PRIVATE_KEY]"}
 
 [Peer]
 PublicKey = {vpn.public_key}
 AllowedIPs = {peer.allowed_ips}
-Endpoint = {vpn.connection_info.ip_address}:{vpn.listen_port}
+Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info else "[INSERT_VPN_IP]"}:{vpn.listen_port}
 PersistentKeepalive = {peer.persistent_keepalive}"""
     return response
 
