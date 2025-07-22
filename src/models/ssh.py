@@ -6,6 +6,7 @@ from models.connection import ConnectionModel, ConnectionResponseModel
 
 # Models for the SSH class
 class SshConnectionModel(ConnectionModel):
+    ip_address: str = Field(..., description="The IP address SSH will use to connect to the VPN server")
     username: str = Field(..., description="The SSH username")
     key: str = Field(..., description="The SSH private key")
     key_password: Optional[str] = Field(None, description="The password for the SSH private key")

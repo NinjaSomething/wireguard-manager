@@ -39,7 +39,7 @@ class SsmConnection(AbstractServerManager):
 
         try:
             resp = ssm.send_command(
-                InstanceIds=[connection_info.data.target],
+                InstanceIds=[connection_info.data.target_id],
                 DocumentName="AWS-RunShellScript",
                 Parameters={"commands": [cmd]},
                 TimeoutSeconds=600,
@@ -52,7 +52,7 @@ class SsmConnection(AbstractServerManager):
         while True:
             try:
                 inv = ssm.get_command_invocation(
-                    CommandId=cmd_id, InstanceId=connection_info.data.target, PluginName="aws:RunShellScript"
+                    CommandId=cmd_id, InstanceId=connection_info.data.target_id, PluginName="aws:RunShellScript"
                 )
             except ClientError as e:
                 return f"SSM get_command_invocation failed: {e}"

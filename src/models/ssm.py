@@ -6,6 +6,7 @@ from models.connection import ConnectionModel, ConnectionResponseModel
 
 # Models for the SSM class
 class SsmConnectionModel(ConnectionModel):
+    target_id: str = Field(..., description="The ID of the EC2 instance to connect to")
     aws_access_key_id: str = Field(..., description="The AWS access key ID")
     aws_secret_access_key: str = Field(..., description="The AWS secret access key")
     region: Optional[str] = Field("us-west-2", description="The AWS region to connect to")

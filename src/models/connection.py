@@ -5,7 +5,7 @@ from models import OpaqueModel
 
 # Generic model for connection requests
 class ConnectionModel(BaseModel):
-    target: str = Field(..., description="The IP/host address to connect to the VPN server")
+    pass
 
 
 class ConnectionResponseModel(ConnectionModel, OpaqueModel):
