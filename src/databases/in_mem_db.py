@@ -23,7 +23,7 @@ class InMemoryDataStore(AbstractDatabase):
         """Return a VPN network by name.  If it doesn't exist, return None."""
         if name in self._vpn_networks:
             stored_vpn = self._vpn_networks[name]
-            peer_list = PeerList(vpn_name="test", db_interface=self)
+            peer_list = PeerList(vpn_name=name, db_interface=self)
             vpn = VpnServer(
                 database=self,
                 name=name,
