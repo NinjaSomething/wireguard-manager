@@ -1,9 +1,8 @@
 from pydantic import BaseModel
 from enum import Enum
 
-from models.connection import ConnectionModel, ConnectionResponseModel
-from models.ssh import SshConnectionModel
-from models.ssm import SsmConnectionModel
+from models.ssh import SshConnectionModel, SshConnectionResponseModel
+from models.ssm import SsmConnectionModel, SsmConnectionResponseModel
 
 """
 This module contains pydantic modules for how the wireguard manager should manage (add/remove peers) from the
@@ -24,7 +23,7 @@ class WireguardConnectionModel(BaseModel):
     """
 
     type: WireguardConnectionType
-    data: ConnectionModel
+    data: SshConnectionModel | SsmConnectionModel
 
 
 class WireguardConnectionResponseModel(BaseModel):
@@ -33,7 +32,7 @@ class WireguardConnectionResponseModel(BaseModel):
     """
 
     type: WireguardConnectionType
-    data: ConnectionResponseModel
+    data: SshConnectionResponseModel | SsmConnectionResponseModel
 
 
 def build_wireguard_connection_model(connection_info: dict | None) -> WireguardConnectionModel | None:

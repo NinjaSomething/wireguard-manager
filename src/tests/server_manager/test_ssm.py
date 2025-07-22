@@ -27,7 +27,7 @@ def connection_info():
     info.data.region = "us-west-2"
     info.data.aws_access_key_id = "AKIA..."
     info.data.aws_secret_access_key = "SECRET..."
-    info.data.target = "i-1234567890abcdef0"
+    info.data.target_id = "i-1234567890abcdef0"
     return info
 
 
