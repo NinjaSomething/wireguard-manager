@@ -8,7 +8,7 @@ import pytest
 from app import app, vpn_router
 from models.ssh import SshConnectionModel
 from models.vpn import VpnPutModel, WireguardModel, VpnModel
-from models.connection import ConnectionModel, ConnectionType
+from models.wireguard_connection import WireguardConnectionModel, WireguardConnectionType
 from models.wg_server import WgServerModel
 
 """
@@ -42,8 +42,8 @@ test_parameters = [
             private_key="PRIVATE_KEY",
             listen_port=12345,
         ),
-        connection_info=ConnectionModel(
-            type=ConnectionType.SSH,
+        connection_info=WireguardConnectionModel(
+            type=WireguardConnectionType.SSH,
             data=SshConnectionModel(ip_address="10.0.0.1", username="test_user", key="SSH_KEY", key_password=None),
         ),
     ),

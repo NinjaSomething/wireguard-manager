@@ -4,9 +4,9 @@ from typing import Optional
 from pydantic import BaseModel
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
-from models.connection import ConnectionType
+from models.wireguard_connection import WireguardConnectionType
 from vpn_manager.vpn import VpnServer
-from models.connection import build_connection_model, ConnectionModel
+from models.wireguard_connection import build_wireguard_connection_model, WireguardConnectionModel
 from databases.in_mem_db import InMemoryDataStore
 from environment import Environment
 
@@ -96,7 +96,7 @@ class DynamoDb(InMemoryDataStore):
 
         all_vpns = []
         for dynamo_vpn in data:
-            connection_info = build_connection_model(dynamo_vpn["connection_info"])
+            connection_info = build_wireguard_connection_model(dynamo_vpn["connection_info"])
             vpn = VpnModel(
                 name=dynamo_vpn["name"],
                 description=dynamo_vpn["description"],
@@ -126,11 +126,17 @@ class DynamoDb(InMemoryDataStore):
             wireguard_listen_port=new_vpn.listen_port,
             connection_info=new_vpn.connection_info.model_dump() if new_vpn.connection_info else None,
         )
-        if new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSH:
+        if new_vpn.connection_info is not None and new_vpn.connection_info.type == WireguardConnectionType.SSH:
             # Get the secret value for the SSH key and password
             vpn_dynamo.connection_info["data"]["key"] = new_vpn.connection_info.data.key
             if new_vpn.connection_info.data.key_password is not None:
                 vpn_dynamo.connection_info["data"]["key_password"] = new_vpn.connection_info.data.key_password
+        if new_vpn.connection_info is not None and new_vpn.connection_info.type == WireguardConnectionType.SSM:
+            # Get the secret value for the AWS aws_access_key_id and aws_secret_access_key
+            vpn_dynamo.connection_info["data"]["aws_access_key_id"] = new_vpn.connection_info.data.aws_access_key_id
+            vpn_dynamo.connection_info["data"][
+                "aws_secret_access_key"
+            ] = new_vpn.connection_info.data.aws_secret_access_key
 
         response = self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
         # TODO: Handle failure response
@@ -188,12 +194,12 @@ class DynamoDb(InMemoryDataStore):
             )
             # TODO: Handle failure response
 
-    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
+    def update_connection_info(self, vpn_name: str, connection_info: WireguardConnectionModel):
         """Update the connection info"""
         connection_info_dict = None
         if connection_info is not None:
             connection_info_dict = connection_info.model_dump()
-            if connection_info.type == ConnectionType.SSH:
+            if connection_info.type == WireguardConnectionType.SSH:
                 # Get the secret value for the SSH key and password
                 connection_info_dict["data"]["key"] = connection_info.data.key
                 if connection_info.data.key_password is not None:
