@@ -2,7 +2,7 @@ from typing import Optional
 import ipaddress
 from models.vpn import WireguardModel, VpnModel
 from models.connection import ConnectionModel
-from models.peers import PeerModel
+from vpn_manager.peers import Peer
 from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase
 from server_manager import server_manager_factory
@@ -19,7 +19,7 @@ class VpnServer:
         public_key: str,
         listen_port: int,
         connection_info: ConnectionModel,
-        peers: PeerList,
+        peers: PeerList[Peer],
         description: Optional[str] = None,
         private_key: Optional[str] = None,
     ):
@@ -33,7 +33,7 @@ class VpnServer:
         self._private_key = private_key
         self._listen_port = listen_port
         self._connection_info = connection_info
-        self._peers = peers
+        self._peers: PeerList[Peer] = peers
 
         # Get a list of all IPs for this subnet
         self._all_ip_addresses = set(ipaddress.ip_network(self.address_space).hosts())
@@ -99,7 +99,7 @@ class VpnServer:
         self._database.update_connection_info(self.name, connection_info)
 
     @property
-    def peers(self) -> list[PeerModel]:
+    def peers(self) -> PeerList[Peer]:
         return self._peers
 
     @property
