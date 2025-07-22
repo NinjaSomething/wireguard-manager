@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 from typing import Optional
-from models.connection import ConnectionType
+from models.wireguard_connection import WireguardConnectionType
 from models.wg_server import WgServerPeerModel, WgServerModel
 
 if typing.TYPE_CHECKING:
@@ -12,16 +12,20 @@ class ConnectionException(Exception):
     """Custom exception for errors when communicating with the wireguard server."""
 
 
-def server_manager_factory(connection_type: ConnectionType) -> AbstractServerManager:
+def server_manager_factory(connection_type: WireguardConnectionType) -> AbstractServerManager:
     """
     Factory function to create an instance of the appropriate server manager based on the connection type.
     :param connection_type: The type of connection (e.g., SSH).
     :return: An instance of a class that implements AbstractServerManager.
     """
-    if connection_type == ConnectionType.SSH:
+    if connection_type == WireguardConnectionType.SSH:
         from server_manager.ssh import SshConnection
 
         return SshConnection()
+    if connection_type == WireguardConnectionType.SSM:
+        from server_manager.ssm import SsmConnection
+
+        return SsmConnection()
     else:
         raise ValueError(f"Unsupported connection type: {connection_type}")
 

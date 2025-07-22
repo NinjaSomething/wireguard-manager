@@ -1,7 +1,7 @@
 from typing import Optional
 import ipaddress
 from models.vpn import WireguardModel, VpnModel
-from models.connection import ConnectionModel
+from models.wireguard_connection import WireguardConnectionModel
 from models.peers import PeerModel
 from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase
@@ -18,7 +18,7 @@ class VpnServer:
         interface: str,
         public_key: str,
         listen_port: int,
-        connection_info: ConnectionModel,
+        connection_info: WireguardConnectionModel,
         peers: PeerList,
         description: Optional[str] = None,
         private_key: Optional[str] = None,
@@ -83,11 +83,11 @@ class VpnServer:
         return self._listen_port
 
     @property
-    def connection_info(self) -> ConnectionModel:
+    def connection_info(self) -> WireguardConnectionModel:
         return self._connection_info
 
     @connection_info.setter
-    def connection_info(self, connection_info: ConnectionModel):
+    def connection_info(self, connection_info: WireguardConnectionModel):
         # Validate the SSH connection info works
         if connection_info is not None:
             server_manager = server_manager_factory(connection_info.type)

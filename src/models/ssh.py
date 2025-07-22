@@ -1,17 +1,17 @@
-from pydantic import BaseModel, Field, SecretStr, field_serializer
+from pydantic import Field, SecretStr, field_serializer
 from typing import Optional
-from models import OpaqueModel
+
+from models.connection import ConnectionModel, ConnectionResponseModel
 
 
 # Models for the SSH class
-class SshConnectionModel(BaseModel):
-    ip_address: str = Field(..., description="The IP address SSH will use to connect to the VPN server")
+class SshConnectionModel(ConnectionModel):
     username: str = Field(..., description="The SSH username")
     key: str = Field(..., description="The SSH private key")
     key_password: Optional[str] = Field(None, description="The password for the SSH private key")
 
 
-class SshConnectionResponseModel(SshConnectionModel, OpaqueModel):
+class SshConnectionResponseModel(SshConnectionModel, ConnectionResponseModel):
     key: SecretStr = Field(..., description="The SSH private key")
 
     @field_serializer("key")

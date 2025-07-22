@@ -6,7 +6,7 @@ from setuptools.windows_support import hide_file
 
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnResponseModel, VpnPutModel
-from models.connection import build_connection_model, ConnectionModel
+from models.wireguard_connection import build_wireguard_connection_model, WireguardConnectionModel
 from models.peers import PeerModel
 from vpn_manager import VpnUpdateException
 from server_manager import ConnectionException
@@ -60,9 +60,9 @@ def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Res
 
 
 @vpn_router.put("/vpn/{name}/connection-info", tags=["vpn"])
-def update_ssh(name: str, connection_info: ConnectionModel) -> list[PeerModel]:
+def update_connection(name: str, connection_info: WireguardConnectionModel) -> list[PeerModel]:
     """
-    Update the SSH connection information for a VPN server.  This is used to connect to the VPN server to add and
+    Update the connection information for a VPN server.  This is used to connect to the VPN server to add and
     remove peers.  This will automatically sync peers on the wireguard server into the wireguard manager.
     """
     # TODO: Add peers to the VPN that exist in the manager but not on the wg server
@@ -72,7 +72,7 @@ def update_ssh(name: str, connection_info: ConnectionModel) -> list[PeerModel]:
 
     # Import peers on the wireguard server automatically
     try:
-        vpn.connection_info = build_connection_model(connection_info.model_dump())
+        vpn.connection_info = build_wireguard_connection_model(connection_info.model_dump())
         added_peers = vpn_manager.import_peers(name)
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
@@ -84,9 +84,9 @@ def update_ssh(name: str, connection_info: ConnectionModel) -> list[PeerModel]:
 
 
 @vpn_router.delete("/vpn/{name}/connection-info", tags=["vpn"])
-def remove_ssh(name: str) -> Response:
+def remove_connection(name: str) -> Response:
     """
-    Delete the SSH connection information for a VPN server.  This service will no longer manage the clients on the VPN server.
+    Delete the connection information for a VPN server.  This service will no longer manage the clients on the VPN server.
     """
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)

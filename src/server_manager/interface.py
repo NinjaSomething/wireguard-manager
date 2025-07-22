@@ -6,7 +6,7 @@ import typing
 if typing.TYPE_CHECKING:
     from vpn_manager.vpn import VpnServer
     from vpn_manager.peers import Peer
-    from models.connection import ConnectionModel
+    from models.wireguard_connection import WireguardConnectionModel
     from models.wg_server import WgServerModel
 
 
@@ -15,7 +15,7 @@ class AbstractServerManager(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def dump_interface_config(
-        self, wg_interface: str, connection_info: ConnectionModel
+        self, wg_interface: str, connection_info: WireguardConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
         """Return the full VPN config.  If this returns a string, it is an error message."""
         pass
