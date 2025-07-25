@@ -1,5 +1,4 @@
 import urllib.parse
-from copy import deepcopy
 from http import HTTPStatus
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
@@ -10,7 +9,7 @@ from app import app, vpn_router
 from models.ssh import SshConnectionModel
 from models.vpn import VpnPutModel, WireguardModel, VpnModel
 from models.connection import ConnectionModel, ConnectionType
-from models.wg_server import WgServerModel
+from models.wg_server import WgServerModel, WgServerPeerModel
 from models.peers import PeerRequestModel, PeerResponseModel
 from interfaces.peers import peer_router
 
@@ -72,7 +71,8 @@ class TestPeerInterface:
             connection_info=vpn.connection_info,
         )
         vpn_router.vpn_manager = mock_vpn_manager
-        mock_ssh_client().exec_command = mock_exec_command.exec_command
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            mock_ssh_client().exec_command = mock_exec_command.exec_command
 
         # Execute Test
         url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -148,8 +148,6 @@ class TestPeerInterface:
             tags=["tag1"],
         )
 
-        ssh_client = mock_ssh_client()
-        ssh_client.exec_command = mock_exec_command.exec_command
         mock_exec_command.server = WgServerModel(
             interface=vpn.wireguard.interface,
             public_key=vpn.wireguard.public_key,
@@ -157,6 +155,10 @@ class TestPeerInterface:
             listen_port=vpn.wireguard.listen_port,
             fw_mark="off",
         )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_exec_command.exec_command
 
         # Execute Test
         response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
@@ -171,10 +173,54 @@ class TestPeerInterface:
 
         # Validate the peer was added to the mock WireGuard server
         if vpn.connection_info is not None:
-            actual_wg_peer = mock_exec_command.peers.pop()
-            assert actual_wg_peer.wg_ip_address == peer_config.ip_address
-            assert actual_wg_peer.public_key == peer_config.public_key
-            assert actual_wg_peer.persistent_keepalive == peer_config.persistent_keepalive
+            found_wg_peer = False
+            for wg_peer in mock_exec_command.peers:
+                if wg_peer.wg_ip_address == peer_config.ip_address:
+                    found_wg_peer = True
+                    assert wg_peer.public_key == peer_config.public_key
+                    assert wg_peer.persistent_keepalive == peer_config.persistent_keepalive
+                    break
+            assert found_wg_peer is True
+
+    def test_add_peer_server_invalid_ip(self, test_input, mock_vpn_manager):
+        """Try adding peer using an existing IP address"""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        peer_config = PeerRequestModel(
+            ip_address="10.20.40.2",
+            allowed_ips="10.20.40.0/24",
+            public_key="PEER_PUBLIC_KEY2",
+            private_key=None,
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        # Execute Test
+        response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.CONFLICT
+
+    def test_add_peer_server_invalid_public_key(self, test_input, mock_vpn_manager):
+        """Try adding peer using an existing public key"""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        peer_config = PeerRequestModel(
+            ip_address="10.20.40.3",
+            allowed_ips="10.20.40.0/24",
+            public_key="PEER_PUBLIC_KEY",
+            private_key=None,
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        # Execute Test
+        response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.CONFLICT
 
     def test_get_all_peers_hide_secrets(self, test_input, mock_vpn_manager):
         """Try getting all peers."""
@@ -348,26 +394,79 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert response.status_code == HTTPStatus.OK
         assert response.text == expected_config
 
-    def test_import_peers(self, test_input):
-        """Try importing peers."""
+    def test_generate_peer_keys_no_vpn(self, test_input, mock_vpn_manager):
+        """Try to generate new peer keys but the vpn doesn't exist."""
         # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
+        response = client.post(f"/vpn/blah/peer/10.20.40.2/generate-wireguard-keys")
 
         # Validate Results
-        pass
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_generate_peer_keys(self, test_input):
+    def test_generate_peer_keys_no_peer(self, test_input, mock_vpn_manager):
+        """Try to generate new peer keys but the peer doesn't exist."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.post(f"/vpn/{test_input.name}/peer/10.20.40.23/generate-wireguard-keys")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
+    @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("vpn_manager.codecs")
+    def test_generate_peer_keys(
+        self, mock_codecs, mock_ssh_client, mock_vpn_manager, mock_exec_command, mock_dynamo_db, test_input
+    ):
         """Try generating a new key-pair for a peer."""
-        # TODO: Get peer from server that doesn't exist
-        # TODO: Get peer that doesn't exist on the server
-        # TODO: Get peer that does exist on the server
         # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY".encode(), "GENERATED_PUBLIC_KEY".encode()]
+        expected_peer = PeerResponseModel(
+            ip_address="10.20.40.2",
+            allowed_ips="10.20.40.0/24",
+            public_key="GENERATED_PUBLIC_KEY",
+            private_key=SecretStr("GENERATED_PRIVATE_KEY"),
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        mock_exec_command.server = WgServerModel(
+            interface=vpn.wireguard.interface,
+            public_key=vpn.wireguard.public_key,
+            private_key=vpn.wireguard.private_key,
+            listen_port=vpn.wireguard.listen_port,
+            fw_mark="off",
+        )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_exec_command.exec_command
 
         # Execute Test
+        response = client.post(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/generate-wireguard-keys")
+        actual_peer = PeerResponseModel(**response.json())
 
         # Validate Results
-        pass
+        assert actual_peer == expected_peer
+
+        # Validate the peer was added to DynamoDB
+        all_peers = mock_dynamo_db.get_all_peers()
+        for db_peer in all_peers[vpn.name]:
+            if db_peer.ip_address == expected_peer.ip_address:
+                assert db_peer.public_key == "GENERATED_PUBLIC_KEY"
+                assert db_peer.private_key == "GENERATED_PRIVATE_KEY"
+
+        # Validate the peer was added to the mock WireGuard server
+        if vpn.connection_info is not None:
+            for wg_peer in mock_exec_command.peers:
+                if wg_peer.wg_ip_address == expected_peer.ip_address:
+                    assert wg_peer.public_key == expected_peer.public_key
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
@@ -387,15 +486,13 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         # Set up Test
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
-        mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY".encode(), "GENERATED_PUBLIC_KEY".encode()]
+        mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY2".encode(), "GENERATED_PUBLIC_KEY2".encode()]
         peer_config = PeerRequestModel(
             allowed_ips="10.20.40.0/24",
             persistent_keepalive=25,
             tags=["tag1", "tag2"],
         )
 
-        ssh_client = mock_ssh_client()
-        ssh_client.exec_command = mock_exec_command.exec_command
         mock_exec_command.server = WgServerModel(
             interface=vpn.wireguard.interface,
             public_key=vpn.wireguard.public_key,
@@ -403,6 +500,10 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             listen_port=vpn.wireguard.listen_port,
             fw_mark="off",
         )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_exec_command.exec_command
 
         # Execute Test
         response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
@@ -417,24 +518,158 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # Validate the peer was added to the mock WireGuard server
         if vpn.connection_info is not None:
-            actual_wg_peer = mock_exec_command.peers.pop()
-            assert actual_wg_peer.wg_ip_address == actual_peer.ip_address
-            assert actual_wg_peer.public_key == actual_peer.public_key
-            assert actual_wg_peer.persistent_keepalive == actual_peer.persistent_keepalive
+            found_wg_peer = False
+            for wg_peer in mock_exec_command.peers:
+                if wg_peer.wg_ip_address == actual_peer.ip_address:
+                    found_wg_peer = True
+                    assert wg_peer.public_key == actual_peer.public_key
+                    assert wg_peer.persistent_keepalive == actual_peer.persistent_keepalive
+                    break
+            assert found_wg_peer is True
 
-    def test_add_tag(self, test_input):
-        """Try adding a tag to a peer."""
-        # TODO: Add tag to peer from server that doesn't exist
-        # TODO: Add tag to peer that doesn't exist on the server
-        # TODO: Add tag to peer that does exist on the server
-        # TODO: Add same tag again to validate it is idempotent
-        # TODO: Add second tag to validate you can assign multiple tags to a peer
+    def test_add_tag_no_vpn(self, test_input, mock_vpn_manager):
+        """Try to add a tag but the vpn doesn't exist."""
         # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
+        response = client.put(f"/vpn/blah/peer/10.20.40.2/tag/tag4")
 
         # Validate Results
-        pass
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_add_tag_no_peer(self, test_input, mock_vpn_manager):
+        """Try to add a tag but the peer doesn't exist."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.put(f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag4")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_add_tag(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Add a tag to a peer."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_tag = "tag3"
+        expected_peer = PeerResponseModel(
+            ip_address="10.20.40.2",
+            allowed_ips="10.20.40.0/24",
+            public_key="GENERATED_PUBLIC_KEY",
+            private_key=SecretStr("**********"),
+            persistent_keepalive=25,
+            tags=["tag1", expected_tag],
+        )
+
+        # Execute Test
+        response = client.put(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        actual_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert actual_peer == expected_peer
+
+        # Validate the peer was added to DynamoDB
+        all_peers = mock_dynamo_db.get_all_peers()
+        for db_peer in all_peers[vpn.name]:
+            if db_peer.ip_address == expected_peer.ip_address:
+                assert expected_tag in db_peer.tags
+
+    def test_add_tag_again(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Try adding the same tag again.  This validates that it is idempotent."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_tag = "tag3"
+        expected_peer = PeerResponseModel(
+            ip_address="10.20.40.2",
+            allowed_ips="10.20.40.0/24",
+            public_key="GENERATED_PUBLIC_KEY",
+            private_key=SecretStr("**********"),
+            persistent_keepalive=25,
+            tags=["tag1", expected_tag],
+        )
+
+        # Execute Test
+        response = client.put(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        actual_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert actual_peer == expected_peer
+
+    def test_remove_tag_no_vpn(self, test_input, mock_vpn_manager):
+        """Try to remove a tag but the vpn doesn't exist."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.delete(f"/vpn/blah/peer/10.20.40.2/tag/tag1")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_remove_tag_no_peer(self, test_input, mock_vpn_manager):
+        """Try to remove a tag but the peer doesn't exist."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.delete(f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag1")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_remove_tag(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Remove a tag from a peer."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_tag = "tag3"
+        expected_peer = PeerResponseModel(
+            ip_address="10.20.40.2",
+            allowed_ips="10.20.40.0/24",
+            public_key="GENERATED_PUBLIC_KEY",
+            private_key=SecretStr("**********"),
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        # Execute Test
+        response = client.delete(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        actual_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert actual_peer == expected_peer
+
+        # Validate the peer was added to DynamoDB
+        all_peers = mock_dynamo_db.get_all_peers()
+        for db_peer in all_peers[vpn.name]:
+            if db_peer.ip_address == expected_peer.ip_address:
+                assert expected_tag not in db_peer.tags
+
+    def test_remove_tag_again(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Remove same tag again to validate it is idempotent."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_tag = "tag3"
+        expected_peer = PeerResponseModel(
+            ip_address="10.20.40.2",
+            allowed_ips="10.20.40.0/24",
+            public_key="GENERATED_PUBLIC_KEY",
+            private_key=SecretStr("**********"),
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        # Execute Test
+        response = client.delete(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        actual_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert actual_peer == expected_peer
 
     def test_get_peer_by_tag_no_vpn(self, test_input, mock_vpn_manager):
         """Try to get a peer by tag but the VPN server doesn't exist."""
@@ -467,16 +702,16 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             PeerResponseModel(
                 ip_address="10.20.40.2",
                 allowed_ips="10.20.40.0/24",
-                public_key="PEER_PUBLIC_KEY",
-                private_key=SecretStr("PEER_PRIVATE_KEY"),
+                public_key="GENERATED_PUBLIC_KEY",
+                private_key=SecretStr("GENERATED_PRIVATE_KEY"),
                 persistent_keepalive=25,
                 tags=["tag1"],
             ),
             PeerResponseModel(
                 ip_address="10.20.40.3",
                 allowed_ips="10.20.40.0/24",
-                public_key="GENERATED_PUBLIC_KEY",
-                private_key=SecretStr("GENERATED_PRIVATE_KEY"),
+                public_key="GENERATED_PUBLIC_KEY2",
+                private_key=SecretStr("GENERATED_PRIVATE_KEY2"),
                 persistent_keepalive=25,
                 tags=["tag1", "tag2"],
             ),
@@ -496,7 +731,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.3",
             allowed_ips="10.20.40.0/24",
-            public_key="GENERATED_PUBLIC_KEY",
+            public_key="GENERATED_PUBLIC_KEY2",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
             tags=["tag1", "tag2"],
@@ -509,31 +744,170 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert response.status_code == HTTPStatus.OK
         assert [PeerResponseModel(**peer_data) for peer_data in response.json()] == [expected_peer]
 
-    def test_delete_tag(self, test_input):
-        """Try adding a tag to a peer."""
-        # TODO: Remove tag from peer from server that doesn't exist
-        # TODO: Remove tag from peer that doesn't exist on the server
-        # TODO: Remove tag from peer
-        # TODO: Remove same tag again to validate it is idempotent
+    def test_import_peers_no_vpn(self, test_input, mock_vpn_manager):
+        """Try to import peers from the wireguard server but the vpn doesn't exist."""
         # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
+        response = client.post(f"/vpn/blah/import")
 
         # Validate Results
-        pass
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_delete_peer(self, test_input):
-        """Try deleting a peer."""
-        # TODO: Try deleting a peer that doesn't exist and the server doesn't exist either
-        # TODO: Try deleting a peer that doesn't exist.
-        # TODO: Try deleting a peer that does exist on the server
-        # TODO: Delete the peer again to validate it is idempotent
+    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
+    @patch("server_manager.ssh.paramiko.SSHClient")
+    def test_import_peers(
+        self,
+        mock_ssh_client,
+        test_input,
+        mock_exec_command,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_dynamo_db,
+    ):
+        """Importing peers from the wireguard server."""
         # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_peer = PeerRequestModel(
+            ip_address="10.20.40.4",
+            allowed_ips="10.20.40.0/24",
+            public_key="PEER_PUBLIC_KEY4",
+            private_key=None,
+            persistent_keepalive=25,
+            tags=["imported"],
+        )
+        wg_peer = WgServerPeerModel(
+            wg_ip_address=expected_peer.ip_address,
+            public_key=expected_peer.public_key,
+            persistent_keepalive=expected_peer.persistent_keepalive,
+            endpoint="(none)",
+            latest_handshake=25,
+            transfer_rx=25,
+            transfer_tx=25,
+            preshared_key=None,
+        )
+
+        mock_exec_command.server = WgServerModel(
+            interface=vpn.wireguard.interface,
+            public_key=vpn.wireguard.public_key,
+            private_key=vpn.wireguard.private_key,
+            listen_port=vpn.wireguard.listen_port,
+            fw_mark="off",
+        )
+
+        if vpn.connection_info is not None:
+            # Inject the peer into the mock WireGuard server
+            mock_exec_command.inject_peer(wg_peer)
+
+            if vpn.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.exec_command = mock_exec_command.exec_command
 
         # Execute Test
+        response = client.post(f"/vpn/{vpn.name}/import")
 
         # Validate Results
-        pass
+        if vpn.connection_info is None:
+            assert response.status_code == HTTPStatus.NOT_FOUND
+        else:
+            assert response.status_code == HTTPStatus.OK
+
+            # Validate the peer was added to DynamoDB
+            found_db_peer = False
+            all_peers = mock_dynamo_db.get_all_peers()
+            for db_peer in all_peers[vpn.name]:
+                if db_peer.ip_address == expected_peer.ip_address:
+                    found_db_peer = True
+                    assert PeerRequestModel(**db_peer.model_dump()) == expected_peer
+                    break
+            assert found_db_peer is True
+
+            # Validate the peer was added to the mock WireGuard server
+            found_wg_peer = False
+            for wg_peer in mock_exec_command.peers:
+                if wg_peer.wg_ip_address == expected_peer.ip_address:
+                    found_wg_peer = True
+                    assert wg_peer.public_key == expected_peer.public_key
+                    assert wg_peer.persistent_keepalive == expected_peer.persistent_keepalive
+                    break
+            assert found_wg_peer is True
+
+            del_response = client.delete(f"/vpn/{test_input.name}/peer/10.20.40.4")
+            assert del_response.status_code == HTTPStatus.OK
+
+    def test_delete_peer_no_vpn(self, test_input, mock_vpn_manager):
+        """Try to delete a peer by tag but the VPN server doesn't exist."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.delete(f"/vpn/blah/peer/10.20.40.2")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_delete_peer_not_exist(self, test_input, mock_vpn_manager):
+        """Try to delete a peer by tag but no peers match.  This also validates that it is idempotent."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.delete(f"/vpn/{test_input.name}/peer/10.20.40.23")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.OK
+
+    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
+    @patch("server_manager.ssh.paramiko.SSHClient")
+    def test_delete_peer(
+        self,
+        mock_ssh_client,
+        test_input,
+        mock_exec_command,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_dynamo_db,
+    ):
+        """Delete a peer."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        delete_ips = ["10.20.40.2", "10.20.40.3"]
+
+        mock_exec_command.server = WgServerModel(
+            interface=vpn.wireguard.interface,
+            public_key=vpn.wireguard.public_key,
+            private_key=vpn.wireguard.private_key,
+            listen_port=vpn.wireguard.listen_port,
+            fw_mark="off",
+        )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_exec_command.exec_command
+
+        for delete_ip in delete_ips:
+            # Execute Test
+            response = client.delete(f"/vpn/{vpn.name}/peer/{delete_ip}")
+
+            # Validate Results
+            assert response.status_code == HTTPStatus.OK
+            get_response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}")
+            assert get_response.status_code == HTTPStatus.NOT_FOUND
+
+            # Validate the peer was deleted from DynamoDB
+            all_peers = mock_dynamo_db.get_all_peers()
+            if len(all_peers) > 0:
+                assert [db_peer for db_peer in all_peers[vpn.name] if db_peer.ip_address == delete_ip] == []
+
+            # Validate the peer was removed from the mock WireGuard server
+            if vpn.connection_info is not None:
+                for wg_peer in mock_exec_command.peers:
+                    if wg_peer.wg_ip_address == delete_ip:
+                        assert wg_peer.wg_ip_address != delete_ip
 
     def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
         """Test deleting a VPN server"""
@@ -545,7 +919,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         response = client.delete(f"/vpn/{vpn.name}")
 
         # Validate Results
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         response = client.get(f"/vpn/{vpn.name}")
         assert response.status_code == HTTPStatus.NOT_FOUND
 
@@ -554,6 +928,6 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         response = client.delete(f"/vpn/{vpn.name}")
 
         # Validate Results
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         all_vpns = mock_dynamo_db.get_all_vpns()
         assert all_vpns == []

@@ -33,6 +33,14 @@ class MockExecCommand:
     def peers(self) -> list[WgServerPeerModel]:
         return deepcopy(self._peers)
 
+    @peers.setter
+    def peers(self, value: list[WgServerPeerModel]):
+        """This allows the test to change the peers model to something different if needed."""
+        self._peers = value
+
+    def inject_peer(self, peer: WgServerPeerModel):
+        self._peers.append(peer)
+
     def _dump(self):
         """
         The following defines the dump format:
