@@ -110,6 +110,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
 def delete_peer(vpn_name: str, ip_address: str) -> Response:
     """Delete a peer from a VPN."""
     vpn_manager = peer_router.vpn_manager
+    validate_vpn_exists(vpn_name, vpn_manager)
     vpn = vpn_manager.get_vpn(vpn_name)
 
     peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
@@ -168,7 +169,7 @@ def get_peer_by_tag(vpn_name: str, tag: str, hide_secrets: bool = True) -> list[
 
 
 @peer_router.post(
-    "/vpn/{vpn_name}/peers/{ip_address}/generate-wireguard-keys", tags=["peers"], response_model=PeerResponseModel
+    "/vpn/{vpn_name}/peer/{ip_address}/generate-wireguard-keys", tags=["peers"], response_model=PeerResponseModel
 )
 def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerResponseModel:
     """Generate new WireGuard keys for a peer."""
@@ -191,7 +192,9 @@ def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerResponseM
             server_manager.add_peer(vpn, peer)
         except ConnectionException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
-    return peer.to_model()
+    peer_response = peer.to_model()
+    peer_response.opaque = False  # Hide secrets in the response
+    return peer_response
 
 
 @peer_router.post("/vpn/{vpn_name}/import", tags=["peers"], response_model=list[PeerResponseModel])
