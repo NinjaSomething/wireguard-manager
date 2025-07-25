@@ -156,7 +156,7 @@ class DynamoDb(InMemoryDataStore):
             peer_id=peer.peer_id,
             ip_address=peer.ip_address,
             public_key=peer.public_key,
-            private_key=peer.private_key.get_secret_value() if peer.private_key else None,
+            private_key=peer.private_key if peer.private_key else None,
             persistent_keepalive=peer.persistent_keepalive,
             allowed_ips=peer.allowed_ips,
             tags=peer.tags,
