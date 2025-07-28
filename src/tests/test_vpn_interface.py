@@ -23,7 +23,7 @@ test_parameters = [
         description="Test VPN Server",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
-            address_space="10.20.40.0/24",
+            ip_network="10.20.40.0/24",
             interface="wg0",
             public_key="PUBLIC_KEY",
             private_key="PRIVATE_KEY",
@@ -36,7 +36,7 @@ test_parameters = [
         description="Test VPN Server",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
-            address_space="10.20.40.0/24",
+            ip_network="10.20.40.0/24",
             interface="wg0",
             public_key="PUBLIC_KEY",
             private_key="PRIVATE_KEY",
@@ -139,13 +139,13 @@ class TestVpnInterface:
             all_vpns = mock_dynamo_db.get_all_vpns()
             assert all_vpns == []
 
-    def test_add_server_invalid_address_space(
+    def test_add_server_invalid_ip_network(
         self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input
     ):
         """Try adding an VPN server with an invalid address space"""
         # Set up Test
         vpn = deepcopy(test_input)
-        vpn.wireguard.address_space = "10.20.400"  # Not a valid address space
+        vpn.wireguard.ip_network = "10.20.400"  # Not a valid address space
         vpn_config = VpnPutModel(
             wireguard=vpn.wireguard,
             connection_info=vpn.connection_info,

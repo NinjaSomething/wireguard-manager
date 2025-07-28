@@ -1,4 +1,7 @@
-from pydantic import BaseModel, Field, SecretStr, field_serializer
+from pydantic import BaseModel, Field, SecretStr, field_serializer, field_validator
+from fastapi import HTTPException
+from http import HTTPStatus
+import ipaddress
 from typing import Optional
 from models.connection import ConnectionModel, ConnectionResponseModel
 from models import OpaqueModel
@@ -10,12 +13,28 @@ class VpnMetaData(BaseModel):
 
 
 class WireguardModel(BaseModel):
-    ip_address: str = Field(..., description="The wireguard IP address")
-    address_space: str = Field(..., description="The subnet for the wireguard VPN. E.g. 10.0.0.0/16")
-    interface: str = Field(..., description="The wireguard interface name")
-    public_key: str = Field(..., description="The wireguard public key")
-    private_key: str = Field(..., description="The wireguard private key")
-    listen_port: int = Field(..., description="The wireguard listen port")
+    ip_address: str = Field(..., description="The wireguard server IP address.", examples=["10.0.0.1"])
+    ip_network: str = Field(
+        ...,
+        description="The ip network for the wireguard VPN. This must use the CIDR notation",
+        examples=["10.0.0.1/24"],
+    )
+    interface: str = Field(..., description="The wireguard interface name", examples=["wg0"])
+    public_key: str = Field(
+        ..., description="The wireguard public key", examples=["knXNHhRRgFQVBSTD60c81oqbFvslnpzAx5Y0/rrJuBY="]
+    )
+    private_key: str = Field(
+        ..., description="The wireguard private key", examples=["8NJdfUxW1deRmrGLW+yVFxH0xCKmfOqxyQCw9O5J4mI="]
+    )
+    listen_port: int = Field(..., description="The wireguard listen port", examples=[40000])
+
+    @field_validator("ip_network")
+    def validate_ip_address(cls, v):
+        try:
+            ipaddress.ip_network(v)
+        except ValueError:
+            raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Invalid Address Space: {v}")
+        return v
 
 
 class VpnPutModel(BaseModel):

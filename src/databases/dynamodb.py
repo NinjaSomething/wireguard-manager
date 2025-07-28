@@ -15,7 +15,7 @@ class VpnDynamoModel(BaseModel):
     name: str
     description: str
     wireguard_ip_address: str
-    wireguard_subnet: str
+    wireguard_ip_network: str
     wireguard_interface: str
     wireguard_public_key: str
     wireguard_private_key: str
@@ -83,7 +83,7 @@ class DynamoDb(InMemoryDataStore):
                 description=dynamo_vpn["description"],
                 wireguard=WireguardModel(
                     ip_address=dynamo_vpn["wireguard_ip_address"],
-                    address_space=dynamo_vpn["wireguard_subnet"],
+                    ip_network=dynamo_vpn["wireguard_ip_network"],
                     interface=dynamo_vpn["wireguard_interface"],
                     public_key=dynamo_vpn["wireguard_public_key"],
                     private_key=dynamo_vpn["wireguard_private_key"],
@@ -127,7 +127,7 @@ class DynamoDb(InMemoryDataStore):
             name=new_vpn.name,
             description=new_vpn.description,
             wireguard_ip_address=new_vpn.ip_address,
-            wireguard_subnet=new_vpn.address_space,
+            wireguard_ip_network=new_vpn.ip_network,
             wireguard_interface=new_vpn.interface,
             wireguard_public_key=new_vpn.public_key,
             wireguard_private_key=new_vpn.private_key,
