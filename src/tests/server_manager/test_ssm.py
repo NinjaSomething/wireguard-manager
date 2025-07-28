@@ -41,7 +41,7 @@ def test_remote_ssm_command_failure(mocker, connection_info):
     operation_name = "SendCommand"
     mock_ssm.send_command.side_effect = ClientError(error_response, operation_name)
     result = SsmConnection._remote_ssm_command("echo test", connection_info)
-    assert "SSM send_command failed" in result
+    assert "SSM connection failed" in result
 
 
 def test_dump_interface_config_success(mocker, connection_info):

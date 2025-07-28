@@ -12,7 +12,7 @@ from typing import List, Union
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 
 if typing.TYPE_CHECKING:
     from vpn_manager.vpn import VpnServer
@@ -29,15 +29,22 @@ class SsmConnection(AbstractServerManager):
         Returns stdout as a list of lines on success, or stderr as a string on error.
         """
         # build AWS credentials and client
-        ssm = boto3.client(
-            "ssm",
-            region_name=connection_info.data.region,
-            aws_access_key_id=connection_info.data.aws_access_key_id,
-            aws_secret_access_key=connection_info.data.aws_secret_access_key,
-            config=Config(retries={"max_attempts": 3, "mode": "standard"}),
-        )
-
         try:
+            if connection_info.data.aws_access_key_id and connection_info.data.aws_secret_access_key:
+                ssm = boto3.client(
+                    "ssm",
+                    region_name=connection_info.data.region,
+                    aws_access_key_id=connection_info.data.aws_access_key_id,
+                    aws_secret_access_key=connection_info.data.aws_secret_access_key,
+                    config=Config(retries={"max_attempts": 3, "mode": "standard"}),
+                )
+            else:
+                # revert to the IAM role of the instance if no credentials are provided
+                ssm = boto3.client(
+                    "ssm",
+                    region_name=connection_info.data.region,
+                    config=Config(retries={"max_attempts": 3, "mode": "standard"}),
+                )
             resp = ssm.send_command(
                 InstanceIds=[connection_info.data.target_id],
                 DocumentName="AWS-RunShellScript",
@@ -46,7 +53,7 @@ class SsmConnection(AbstractServerManager):
             )
             cmd_id = resp["Command"]["CommandId"]
         except ClientError as e:
-            return f"SSM send_command failed: {e}"
+            return f"SSM connection failed: {e}"
 
         # poll until the command finishes
         while True:
