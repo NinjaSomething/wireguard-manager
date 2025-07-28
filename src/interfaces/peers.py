@@ -78,7 +78,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
 
     # Verify the allowed_ips are within the bounds of the VPN server address space
     try:
-        vpn.validate_address_space(peer.allowed_ips)
+        vpn.validate_ip_network(peer.allowed_ips)
     except ValueError as ex:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,

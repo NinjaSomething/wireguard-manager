@@ -29,7 +29,7 @@ class InMemoryDataStore(AbstractDatabase):
                 name=name,
                 description=stored_vpn.description,
                 ip_address=stored_vpn.wireguard.ip_address,
-                address_space=stored_vpn.wireguard.address_space,
+                ip_network=stored_vpn.wireguard.ip_network,
                 interface=stored_vpn.wireguard.interface,
                 public_key=stored_vpn.wireguard.public_key,
                 private_key=stored_vpn.wireguard.private_key,
@@ -48,7 +48,7 @@ class InMemoryDataStore(AbstractDatabase):
             description=new_vpn.description,
             wireguard=WireguardModel(
                 ip_address=new_vpn.ip_address,
-                address_space=new_vpn.address_space,
+                ip_network=new_vpn.ip_network,
                 interface=new_vpn.interface,
                 public_key=new_vpn.public_key,
                 private_key=new_vpn.private_key,

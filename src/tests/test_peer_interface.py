@@ -22,7 +22,7 @@ test_parameters = [
         description="Test VPN Server",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
-            address_space="10.20.40.0/24",
+            ip_network="10.20.40.0/24",
             interface="wg0",
             public_key="PUBLIC_KEY",
             private_key="PRIVATE_KEY",
@@ -35,7 +35,7 @@ test_parameters = [
         description="Test VPN Server",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
-            address_space="10.20.40.0/24",
+            ip_network="10.20.40.0/24",
             interface="wg0",
             public_key="PUBLIC_KEY",
             private_key="PRIVATE_KEY",
@@ -103,7 +103,7 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_add_peer_server_invalid_address_space(self, test_input, mock_vpn_manager):
+    def test_add_peer_server_invalid_ip_network(self, test_input, mock_vpn_manager):
         """Try adding a peer to a server using an IP in a different subnet."""
         # Set up Test
         vpn = test_input
