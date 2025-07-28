@@ -6,7 +6,7 @@ from setuptools.windows_support import hide_file
 
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnResponseModel, VpnPutModel
-from models.wireguard_connection import build_wireguard_connection_model, WireguardConnectionModel
+from models.wireguard_connection import build_wireguard_connection_model, ConnectionModel
 from models.peers import PeerModel
 from vpn_manager import VpnUpdateException
 from server_manager import ConnectionException
@@ -60,7 +60,7 @@ def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Res
 
 
 @vpn_router.put("/vpn/{name}/connection-info", tags=["vpn"])
-def update_connection(name: str, connection_info: WireguardConnectionModel) -> list[PeerModel]:
+def update_connection(name: str, connection_info: ConnectionModel) -> list[PeerModel]:
     """
     Update the connection information for a VPN server.  This is used to connect to the VPN server to add and
     remove peers.  This will automatically sync peers on the wireguard server into the wireguard manager.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 from typing import Optional
-from models.wireguard_connection import WireguardConnectionModel
+from models.wireguard_connection import ConnectionModel
 from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 import logging
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 class SsmConnection(AbstractServerManager):
     @staticmethod
-    def _remote_ssm_command(cmd: str, connection_info: WireguardConnectionModel) -> Union[List[str], str]:
+    def _remote_ssm_command(cmd: str, connection_info: ConnectionModel) -> Union[List[str], str]:
         """
         Run a single shell command on an EC2 instance via SSM.
         Returns stdout as a list of lines on success, or stderr as a string on error.
@@ -66,10 +66,10 @@ class SsmConnection(AbstractServerManager):
         if status == "Success":
             return inv.get("StandardOutputContent", "").splitlines()
         else:
-            return inv.get("StandardErrorContent", "") or f"Command ended with status: {status}"
+            return inv.get("StandardErrorContent", "")
 
     def dump_interface_config(
-        self, wg_interface: str, connection_info: WireguardConnectionModel
+        self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
         """Return the full VPN config.  If this returns a string, it is an error message."""
         cmd_to_execute = f"sudo wg show {wg_interface} dump"

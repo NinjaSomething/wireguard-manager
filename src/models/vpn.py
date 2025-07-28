@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, SecretStr, field_serializer
 from typing import Optional
-from models.wireguard_connection import WireguardConnectionModel, WireguardConnectionResponseModel
+from models.wireguard_connection import ConnectionModel, ConnectionResponseModel
 from models import OpaqueModel
 
 
@@ -22,7 +22,7 @@ class VpnPutModel(BaseModel):
     wireguard: WireguardModel = Field(
         ..., description="This contains all the wireguard configuration for the VPN server"
     )
-    connection_info: Optional[WireguardConnectionModel] = Field(
+    connection_info: Optional[ConnectionModel] = Field(
         None,
         description="This contains all the information required for this service to manage the VPN server. If "
         "provided, this service will add and remove peers from the VPN server itself.",
@@ -46,7 +46,7 @@ class VpnPutResponseModel(BaseModel):
     wireguard: WireguardResponseModel = Field(
         ..., description="This contains all the wireguard configuration for the VPN server"
     )
-    connection_info: Optional[WireguardConnectionResponseModel] = Field(
+    connection_info: Optional[ConnectionResponseModel] = Field(
         None,
         description="This contains all the information required for this service to manage the VPN server. If "
         "provided, this service will add and remove peers from the VPN server itself.",

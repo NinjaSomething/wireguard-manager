@@ -1,19 +1,11 @@
-"""
-This test file uses the 'mocker' fixture from pytest-mock for patching.
-Install pytest-mock with: pip install pytest-mock
-"""
-
-try:
-    import pytest_mock  # noqa: F401
-except ImportError:
-    raise ImportError("pytest-mock is required for these tests. Install it with: pip install pytest-mock")
-
+# Necessary import for mocker
+import pytest_mock
 import pytest
 from unittest.mock import MagicMock
 
 from models.ssm import SsmConnectionModel
 from server_manager.ssm import SsmConnection, ConnectionException
-from models.wireguard_connection import WireguardConnectionModel, WireguardConnectionType
+from models.wireguard_connection import ConnectionModel, ConnectionType
 from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 from botocore.exceptions import ClientError
@@ -21,8 +13,8 @@ from botocore.exceptions import ClientError
 
 @pytest.fixture
 def connection_info():
-    info = MagicMock(spec=WireguardConnectionModel)
-    info.type = WireguardConnectionType.SSM
+    info = MagicMock(spec=ConnectionModel)
+    info.type = ConnectionType.SSM
     info.data = MagicMock(spec=SsmConnectionModel)
     info.data.region = "us-west-2"
     info.data.aws_access_key_id = "AKIA..."

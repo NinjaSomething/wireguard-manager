@@ -3,7 +3,7 @@ import typing
 from typing import Optional, List, Union
 import paramiko
 from io import StringIO
-from models.wireguard_connection import WireguardConnectionModel
+from models.wireguard_connection import ConnectionModel
 from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 import logging
@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 class SshConnection(AbstractServerManager):
     @staticmethod
-    def _remote_ssh_command(cmd: str, connection_info: WireguardConnectionModel) -> Union[List[str], str]:
+    def _remote_ssh_command(cmd: str, connection_info: ConnectionModel) -> Union[List[str], str]:
         """
         Remotely execute SSH command
         :return
@@ -58,7 +58,7 @@ class SshConnection(AbstractServerManager):
         return result
 
     def dump_interface_config(
-        self, wg_interface: str, connection_info: WireguardConnectionModel
+        self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
         """Return the full VPN config.  If this returns a string, it is an error message."""
         cmd_to_execute = f"sudo wg show {wg_interface} dump"

@@ -1,20 +1,22 @@
-from pydantic import Field, SecretStr, field_serializer
+from pydantic import Field, SecretStr, field_serializer, BaseModel
 from typing import Optional
 
-from models.connection import ConnectionModel, ConnectionResponseModel
+from models import OpaqueModel
 
 
 # Models for the SSM class
-class SsmConnectionModel(ConnectionModel):
+class SsmConnectionModel(BaseModel):
     target_id: str = Field(..., description="The ID of the EC2 instance to connect to")
     aws_access_key_id: str = Field(..., description="The AWS access key ID")
     aws_secret_access_key: str = Field(..., description="The AWS secret access key")
     region: Optional[str] = Field("us-west-2", description="The AWS region to connect to")
 
 
-class SsmConnectionResponseModel(SsmConnectionModel, ConnectionResponseModel):
-    @field_serializer("aws_access_key_id")
-    @field_serializer("aws_secret_access_key")
+class SsmConnectionResponseModel(SsmConnectionModel, OpaqueModel):
+    aws_access_key_id: SecretStr = Field(..., description="The AWS access key ID")
+    aws_secret_access_key: SecretStr = Field(..., description="The AWS secret access key")
+
+    @field_serializer("aws_access_key_id", "aws_secret_access_key")
     def dump_secret_json(self, secret: SecretStr):
         if self._opaque:
             return secret

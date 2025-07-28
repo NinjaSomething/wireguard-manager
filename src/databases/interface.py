@@ -6,7 +6,7 @@ if typing.TYPE_CHECKING:
     from models.peers import PeerModel
     from vpn_manager.vpn import VpnServer
     from vpn_manager.peers import Peer
-    from models.wireguard_connection import WireguardConnectionModel
+    from models.wireguard_connection import ConnectionModel
 
 
 class AbstractDatabase(metaclass=abc.ABCMeta):
@@ -66,6 +66,6 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def update_connection_info(self, vpn_name: str, connection_info: WireguardConnectionModel):
+    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
         pass

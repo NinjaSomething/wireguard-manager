@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 from typing import Optional
-from models.wireguard_connection import WireguardConnectionType
+from models.wireguard_connection import ConnectionType
 from models.wg_server import WgServerPeerModel, WgServerModel
 
 if typing.TYPE_CHECKING:
@@ -12,17 +12,17 @@ class ConnectionException(Exception):
     """Custom exception for errors when communicating with the wireguard server."""
 
 
-def server_manager_factory(connection_type: WireguardConnectionType) -> AbstractServerManager:
+def server_manager_factory(connection_type: ConnectionType) -> AbstractServerManager:
     """
     Factory function to create an instance of the appropriate server manager based on the connection type.
     :param connection_type: The type of connection (e.g., SSH).
     :return: An instance of a class that implements AbstractServerManager.
     """
-    if connection_type == WireguardConnectionType.SSH:
+    if connection_type == ConnectionType.SSH:
         from server_manager.ssh import SshConnection
 
         return SshConnection()
-    if connection_type == WireguardConnectionType.SSM:
+    if connection_type == ConnectionType.SSM:
         from server_manager.ssm import SsmConnection
 
         return SsmConnection()
@@ -32,7 +32,7 @@ def server_manager_factory(connection_type: WireguardConnectionType) -> Abstract
 
 def extract_wg_server_config(wg_interface, wg_config: list[str]) -> Optional[WgServerModel]:
     """
-    This will extract the WireGuard server configuration from the output of a wireguard dump command.  The
+    This will extract the WireGuard server configuration from the output of a wireguard dump cmd.  The
       following defines the dump format:
 
     Several lines are returned; the first contains in order separated by tab:

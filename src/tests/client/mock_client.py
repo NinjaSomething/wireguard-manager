@@ -1,24 +1,18 @@
 import parse
-from unittest.mock import MagicMock
 
-from interfaces.peers import peer_router
 from models.wg_server import WgServerModel, WgServerPeerModel
 
 
-class MockExecCommand:
+class MockCommand:
     """
-    This will mock out the behaviour of the SSHClient.exec_command method for testing purposes.  Specifically, it will
+    This module contains the generic mocks that allow the behaviour of the commanding method for testing purposes.  Specifically, it will
     simulate adding/removing a peer from the WireGuard server, and dumping the WireGuard configuration in the expected
     format.
     """
 
-    def __init__(self, server: WgServerModel, peers: list[WgServerPeerModel] = None):
-        self._connection_failure = False
+    def __init__(self, server: WgServerModel, peers: list[WgServerPeerModel]):
         self._server = server
         self._peers = peers or []
-        self.ssh_stdin = MagicMock()
-        self.ssh_stdout = MagicMock()
-        self.ssh_stderr = MagicMock()
 
     @property
     def server(self) -> WgServerModel:
@@ -83,20 +77,3 @@ class MockExecCommand:
                     break
             if remove_peer:
                 self._peers.remove(remove_peer)
-
-    def exec_command(self, command, bufsize=-1, timeout=None, get_pty=False, environment=None):
-        self.ssh_stdout.channel.recv_exit_status.return_value = 0
-        if f"wg show " in command and "dump" in command:
-            dump_dict = parse.parse("sudo wg show {wg_interface} dump", command)
-            if dump_dict["wg_interface"] == self._server.interface:
-                self.ssh_stdout.readlines.return_value = self._dump()
-            else:
-                # This simulates trying to dump an interface that does not exist.
-                self.ssh_stderr.readlines.return_value = ["Error: Interface not found"]
-                self.ssh_stdout.readlines.return_value = []
-                self.ssh_stdout.channel.recv_exit_status.return_value = 1
-        elif "remove" in command and "wg set" in command:
-            self._remove_peer(command)
-        elif "wg set" in command:
-            self._add_peer(command)
-        return self.ssh_stdin, self.ssh_stdout, self.ssh_stderr
