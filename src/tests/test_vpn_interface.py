@@ -93,7 +93,8 @@ class TestVpnInterface:
             )
 
             vpn_router.vpn_manager = mock_vpn_manager
-            mock_ssh_client().exec_command = mock_exec_command.exec_command
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+                mock_ssh_client().exec_command = mock_exec_command.exec_command
 
             # Execute Test
             url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -126,9 +127,10 @@ class TestVpnInterface:
             )
 
             vpn_router.vpn_manager = mock_vpn_manager
-            ssh_client = mock_ssh_client()
-            ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
-            ssh_client.exec_command = mock_exec_command.exec_command
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
+                ssh_client.exec_command = mock_exec_command.exec_command
 
             # Execute Test
             url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -182,7 +184,8 @@ class TestVpnInterface:
             connection_info=vpn.connection_info,
         )
         vpn_router.vpn_manager = mock_vpn_manager
-        mock_ssh_client().exec_command = mock_exec_command.exec_command
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            mock_ssh_client().exec_command = mock_exec_command.exec_command
 
         # Execute Test
         url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -335,9 +338,10 @@ class TestVpnInterface:
             )
 
             vpn_router.vpn_manager = mock_vpn_manager
-            ssh_client = mock_ssh_client()
-            ssh_client.connect.side_effect = None
-            ssh_client.exec_command = mock_exec_command.exec_command
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.connect.side_effect = None
+                ssh_client.exec_command = mock_exec_command.exec_command
 
             # Execute Test
             response = client.put(
@@ -367,9 +371,10 @@ class TestVpnInterface:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
             vpn_router.vpn_manager = mock_vpn_manager
-            ssh_client = mock_ssh_client()
-            ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
-            ssh_client.exec_command = mock_exec_command.exec_command
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
+                ssh_client.exec_command = mock_exec_command.exec_command
 
             # Execute Test
             response = client.put(
@@ -382,7 +387,8 @@ class TestVpnInterface:
             assert all_vpns == [expected_vpn]
 
             # Break down test
-            ssh_client.connect.side_effect = None
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                ssh_client.connect.side_effect = None
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
@@ -400,8 +406,9 @@ class TestVpnInterface:
         # Set up Test - Get all VPN servers but don't hide secrets
         vpn = test_input
         vpn_router.vpn_manager = mock_vpn_manager
-        ssh_client = mock_ssh_client()
-        ssh_client.exec_command = mock_exec_command.exec_command
+        if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_exec_command.exec_command
 
         mock_exec_command.server = WgServerModel(
             interface="wg0", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"
