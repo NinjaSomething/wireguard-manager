@@ -1,6 +1,6 @@
 from typing import Optional
 from databases.interface import AbstractDatabase
-from models.peers import PeerModel, PeerDbModel
+from models.peers import PeerResponseModel, PeerDbModel
 
 
 class Peer:
@@ -58,8 +58,8 @@ class Peer:
     def tags(self) -> list[str]:
         return self._tags
 
-    def to_model(self) -> PeerModel:
-        return PeerModel(
+    def to_model(self) -> PeerResponseModel:
+        return PeerResponseModel(
             ip_address=self._ip_address,
             allowed_ips=self._allowed_ips,
             public_key=self._public_key,
@@ -107,6 +107,6 @@ class PeerList(list):
             self.db_interface.delete_peer(vpn_name=self.vpn_name, peer=peer.to_db_model())
         super().clear()
 
-    def to_model(self) -> list[PeerModel]:
-        """Convert the peer list to a list of PeerModel."""
+    def to_model(self) -> list[PeerResponseModel]:
+        """Convert the peer list to a list of PeerResponseModel."""
         return [peer.to_model() for peer in self]

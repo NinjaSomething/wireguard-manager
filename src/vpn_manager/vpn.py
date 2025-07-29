@@ -2,7 +2,7 @@ from typing import Optional
 import ipaddress
 from models.vpn import WireguardModel, VpnModel
 from models.wireguard_connection import ConnectionModel
-from models.peers import PeerModel
+from vpn_manager.peers import Peer
 from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase
 from server_manager import server_manager_factory
@@ -14,18 +14,18 @@ class VpnServer:
         database: AbstractDatabase,
         name: str,
         ip_address: str,
-        address_space: str,
+        ip_network: str,
         interface: str,
         public_key: str,
         listen_port: int,
         connection_info: ConnectionModel,
-        peers: PeerList,
+        peers: PeerList[Peer],
         description: Optional[str] = None,
         private_key: Optional[str] = None,
     ):
         self._database = database
         self._name = name
-        self._address_space = address_space
+        self._ip_network = ip_network
         self._description = description
         self._ip_address = ip_address
         self._interface = interface
@@ -33,10 +33,10 @@ class VpnServer:
         self._private_key = private_key
         self._listen_port = listen_port
         self._connection_info = connection_info
-        self._peers = peers
+        self._peers: PeerList[Peer] = peers
 
         # Get a list of all IPs for this subnet
-        self._all_ip_addresses = set(ipaddress.ip_network(self.address_space).hosts())
+        self._all_ip_addresses = set(ipaddress.ip_network(self.ip_network).hosts())
         self._available_ips = []
         self.calculate_available_ips()
 
@@ -53,8 +53,8 @@ class VpnServer:
         return self._ip_address
 
     @property
-    def address_space(self) -> str:
-        return self._address_space
+    def ip_network(self) -> str:
+        return self._ip_network
 
     @property
     def interface(self) -> str:
@@ -99,7 +99,7 @@ class VpnServer:
         self._database.update_connection_info(self.name, connection_info)
 
     @property
-    def peers(self) -> list[PeerModel]:
+    def peers(self) -> PeerList[Peer]:
         return self._peers
 
     @property
@@ -110,12 +110,12 @@ class VpnServer:
     def available_ips(self) -> list[str]:
         return self._available_ips
 
-    def validate_address_space(self, address_space: str) -> bool:
+    def validate_ip_network(self, ip_network: str) -> bool:
         """Will raise a ValueError if the address space is not valid."""
-        peer_address_space = set(ipaddress.ip_network(address_space).hosts())
-        if len(list(peer_address_space - self._all_ip_addresses)) > 0:
+        peer_ip_network = set(ipaddress.ip_network(ip_network).hosts())
+        if len(list(peer_ip_network - self._all_ip_addresses)) > 0:
             raise ValueError(
-                f"Address space [{address_space}] is larger than the address space of the VPN server [{self.address_space}]."
+                f"Address space [{ip_network}] is larger than the address space of the VPN server [{self.ip_network}]."
             )
 
     def get_next_available_ip(self) -> str:
@@ -140,7 +140,7 @@ class VpnServer:
             description=self._description,
             wireguard=WireguardModel(
                 ip_address=self.ip_address,
-                address_space=self.address_space,
+                ip_network=self.ip_network,
                 interface=self.interface,
                 public_key=self.public_key,
                 private_key=self.private_key,

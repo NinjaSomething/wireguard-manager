@@ -1,4 +1,6 @@
 import parse
+from copy import deepcopy
+from unittest.mock import MagicMock
 
 from models.wg_server import WgServerModel, WgServerPeerModel
 
@@ -16,12 +18,24 @@ class MockCommand:
 
     @property
     def server(self) -> WgServerModel:
-        return self._server
+        return deepcopy(self._server)
 
     @server.setter
     def server(self, value: WgServerModel):
         """This allows the test to change the server model to something different if needed."""
         self._server = value
+
+    @property
+    def peers(self) -> list[WgServerPeerModel]:
+        return deepcopy(self._peers)
+
+    @peers.setter
+    def peers(self, value: list[WgServerPeerModel]):
+        """This allows the test to change the peers model to something different if needed."""
+        self._peers = value
+
+    def inject_peer(self, peer: WgServerPeerModel):
+        self._peers.append(peer)
 
     def _dump(self):
         """

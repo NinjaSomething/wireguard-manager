@@ -15,7 +15,7 @@ class VpnDynamoModel(BaseModel):
     name: str
     description: str
     wireguard_ip_address: str
-    wireguard_subnet: str
+    wireguard_ip_network: str
     wireguard_interface: str
     wireguard_public_key: str
     wireguard_private_key: str
@@ -65,26 +65,7 @@ class DynamoDb(InMemoryDataStore):
 
     def _init_peers_from_db(self):
         """Get existing Peers from DynamoDb and add them to the in-memory datastore."""
-        response = self.peer_table.scan()
-        data = response["Items"]
-        while "LastEvaluatedKey" in response:
-            response = self.vpn_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-            data.extend(response["Items"])
-
-        for dynamo_peer in data:
-            peer = PeerDbModel(
-                peer_id=dynamo_peer["peer_id"],
-                ip_address=dynamo_peer["ip_address"],
-                public_key=dynamo_peer["public_key"],
-                private_key=dynamo_peer["private_key"],
-                persistent_keepalive=dynamo_peer["persistent_keepalive"],
-                allowed_ips=dynamo_peer["allowed_ips"],
-                tags=dynamo_peer["tags"],
-            )
-
-            if dynamo_peer["vpn_name"] not in self._vpn_peers:
-                self._vpn_peers[dynamo_peer["vpn_name"]] = []
-            self._vpn_peers[dynamo_peer["vpn_name"]].append(peer)
+        self._vpn_peers = self.get_all_peers()
 
     def get_all_vpns(self) -> list[VpnModel]:
         """Get all VPN networks from the database."""
@@ -102,7 +83,7 @@ class DynamoDb(InMemoryDataStore):
                 description=dynamo_vpn["description"],
                 wireguard=WireguardModel(
                     ip_address=dynamo_vpn["wireguard_ip_address"],
-                    address_space=dynamo_vpn["wireguard_subnet"],
+                    ip_network=dynamo_vpn["wireguard_ip_network"],
                     interface=dynamo_vpn["wireguard_interface"],
                     public_key=dynamo_vpn["wireguard_public_key"],
                     private_key=dynamo_vpn["wireguard_private_key"],
@@ -113,13 +94,40 @@ class DynamoDb(InMemoryDataStore):
             all_vpns.append(vpn)
         return all_vpns
 
+    def get_all_peers(self) -> dict[str, list[PeerDbModel]]:
+        """
+        Get all peers from the database.
+        dict key: vpn_name
+        """
+        vpn_peers = {}
+        response = self.peer_table.scan()
+        data = response["Items"]
+        while "LastEvaluatedKey" in response:
+            response = self.vpn_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
+            data.extend(response["Items"])
+
+        for dynamo_peer in data:
+            peer = PeerDbModel(
+                peer_id=dynamo_peer["peer_id"],
+                ip_address=dynamo_peer["ip_address"],
+                public_key=dynamo_peer["public_key"],
+                private_key=dynamo_peer["private_key"],
+                persistent_keepalive=dynamo_peer["persistent_keepalive"],
+                allowed_ips=dynamo_peer["allowed_ips"],
+                tags=dynamo_peer["tags"],
+            )
+            if dynamo_peer["vpn_name"] not in vpn_peers:
+                vpn_peers[dynamo_peer["vpn_name"]] = []
+            vpn_peers[dynamo_peer["vpn_name"]].append(peer)
+        return vpn_peers
+
     def add_vpn(self, new_vpn: VpnServer):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
         vpn_dynamo = VpnDynamoModel(
             name=new_vpn.name,
             description=new_vpn.description,
             wireguard_ip_address=new_vpn.ip_address,
-            wireguard_subnet=new_vpn.address_space,
+            wireguard_ip_network=new_vpn.ip_network,
             wireguard_interface=new_vpn.interface,
             wireguard_public_key=new_vpn.public_key,
             wireguard_private_key=new_vpn.private_key,
@@ -154,7 +162,7 @@ class DynamoDb(InMemoryDataStore):
             peer_id=peer.peer_id,
             ip_address=peer.ip_address,
             public_key=peer.public_key,
-            private_key=peer.private_key.get_secret_value() if peer.private_key else None,
+            private_key=peer.private_key if peer.private_key else None,
             persistent_keepalive=peer.persistent_keepalive,
             allowed_ips=peer.allowed_ips,
             tags=peer.tags,

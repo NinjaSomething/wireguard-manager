@@ -23,7 +23,7 @@ test_parameters = [
         description="Test VPN Server",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
-            address_space="10.20.40.0/24",
+            ip_network="10.20.40.0/24",
             interface="wg0",
             public_key="PUBLIC_KEY",
             private_key="PRIVATE_KEY",
@@ -36,7 +36,7 @@ test_parameters = [
         description="Test VPN Server",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
-            address_space="10.20.40.0/24",
+            ip_network="10.20.40.0/24",
             interface="wg0",
             public_key="PUBLIC_KEY",
             private_key="PRIVATE_KEY",
@@ -93,7 +93,8 @@ class TestVpnInterface:
             )
 
             vpn_router.vpn_manager = mock_vpn_manager
-            mock_ssh_client().exec_command = mock_ssh_command.command
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+                mock_ssh_client().exec_command = mock_ssh_command.command
 
             # Execute Test
             url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -126,9 +127,10 @@ class TestVpnInterface:
             )
 
             vpn_router.vpn_manager = mock_vpn_manager
-            ssh_client = mock_ssh_client()
-            ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
-            ssh_client.exec_command = mock_ssh_command.command
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
+                ssh_client.exec_command = mock_ssh_command.command
 
             # Execute Test
             url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -139,13 +141,13 @@ class TestVpnInterface:
             all_vpns = mock_dynamo_db.get_all_vpns()
             assert all_vpns == []
 
-    def test_add_server_invalid_address_space(
+    def test_add_server_invalid_ip_network(
         self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input
     ):
         """Try adding an VPN server with an invalid address space"""
         # Set up Test
         vpn = deepcopy(test_input)
-        vpn.wireguard.address_space = "10.20.400"  # Not a valid address space
+        vpn.wireguard.ip_network = "10.20.400"  # Not a valid address space
         vpn_config = VpnPutModel(
             wireguard=vpn.wireguard,
             connection_info=vpn.connection_info,
@@ -182,7 +184,8 @@ class TestVpnInterface:
             connection_info=vpn.connection_info,
         )
         vpn_router.vpn_manager = mock_vpn_manager
-        mock_ssh_client().exec_command = mock_ssh_command.command
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            mock_ssh_client().exec_command = mock_ssh_command.command
 
         # Execute Test
         url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -335,9 +338,10 @@ class TestVpnInterface:
             )
 
             vpn_router.vpn_manager = mock_vpn_manager
-            ssh_client = mock_ssh_client()
-            ssh_client.connect.side_effect = None
-            ssh_client.exec_command = mock_ssh_command.command
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.connect.side_effect = None
+                ssh_client.exec_command = mock_ssh_command.command
 
             # Execute Test
             response = client.put(
@@ -367,9 +371,10 @@ class TestVpnInterface:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
             vpn_router.vpn_manager = mock_vpn_manager
-            ssh_client = mock_ssh_client()
-            ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
-            ssh_client.exec_command = mock_ssh_command.command
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                ssh_client = mock_ssh_client()
+                ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
+                ssh_client.exec_command = mock_ssh_command.command
 
             # Execute Test
             response = client.put(
@@ -382,7 +387,8 @@ class TestVpnInterface:
             assert all_vpns == [expected_vpn]
 
             # Break down test
-            ssh_client.connect.side_effect = None
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                ssh_client.connect.side_effect = None
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
@@ -400,8 +406,9 @@ class TestVpnInterface:
         # Set up Test - Get all VPN servers but don't hide secrets
         vpn = test_input
         vpn_router.vpn_manager = mock_vpn_manager
-        ssh_client = mock_ssh_client()
-        ssh_client.exec_command = mock_ssh_command.command
+        if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_ssh_command.command
 
         mock_ssh_command.server = WgServerModel(
             interface="wg0", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"

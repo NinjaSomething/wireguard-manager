@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 
 from models.ssh import SshConnectionModel, SshConnectionResponseModel
@@ -22,8 +22,14 @@ class ConnectionModel(BaseModel):
     This model includes all the information required to connect to the wireguard server.  The data field is generic.
     """
 
-    type: ConnectionType
-    data: SshConnectionModel | SsmConnectionModel
+    type: ConnectionType = Field(
+        ...,
+        description="This is used to determine how the wireguard manager will communicate with the wireguard server.  "
+        "This is used to add and remove peers.",
+    )
+    data: SshConnectionModel | SsmConnectionModel = Field(
+        ..., description="These are the connection details for how to connect to the wireguard server. "
+    )
 
 
 class ConnectionResponseModel(BaseModel):
@@ -31,8 +37,14 @@ class ConnectionResponseModel(BaseModel):
     This model includes all the information required to connect to the wireguard server.  The data field is generic.
     """
 
-    type: ConnectionType
-    data: SshConnectionResponseModel | SsmConnectionResponseModel
+    type: ConnectionType = Field(
+        ...,
+        description="This is used to determine how the wireguard manager will communicate with the wireguard server.  "
+        "This is used to add and remove peers.",
+    )
+    data: SshConnectionResponseModel | SsmConnectionResponseModel = Field(
+        ..., description="These are the connection details for how to connect to the wireguard server. "
+    )
 
 
 def build_wireguard_connection_model(connection_info: dict | None) -> ConnectionModel | None:

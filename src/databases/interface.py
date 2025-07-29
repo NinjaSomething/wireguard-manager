@@ -3,7 +3,7 @@ import abc
 import typing
 
 if typing.TYPE_CHECKING:
-    from models.peers import PeerModel
+    from models.peers import PeerDbModel
     from vpn_manager.vpn import VpnServer
     from vpn_manager.peers import Peer
     from models.wireguard_connection import ConnectionModel
@@ -36,12 +36,12 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def add_peer(self, vpn_name: str, peer: PeerModel):
+    def add_peer(self, vpn_name: str, peer: PeerDbModel):
         """Add a new peer to the database.  If it already exists, raise a ValueError exception."""
         pass
 
     @abc.abstractmethod
-    def delete_peer(self, vpn_name: str, peer: PeerModel):
+    def delete_peer(self, vpn_name: str, peer: PeerDbModel):
         """Remove a peer from the database."""
         pass
 

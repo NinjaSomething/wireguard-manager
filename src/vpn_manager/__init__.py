@@ -34,12 +34,6 @@ class VpnManager:
                     f"A Wireguard VPN using the public key {vpn_request.wireguard.public_key} already exists."
                 )
 
-        # Validate the IP address space.  ValueError will be raised if the address space is invalid.
-        try:
-            ipaddress.ip_network(vpn_request.wireguard.address_space).hosts()
-        except ValueError as ex:
-            raise KeyError(f"Invalid address space {vpn_request.wireguard.address_space} for VPN {name}: {ex}")
-
         # Validate the connection info works
         if vpn_request.connection_info is not None:
             server_manager = server_manager_factory(vpn_request.connection_info.type)
@@ -54,7 +48,7 @@ class VpnManager:
             name=name,
             description=description,
             ip_address=vpn_request.wireguard.ip_address,
-            address_space=vpn_request.wireguard.address_space,
+            ip_network=vpn_request.wireguard.ip_network,
             interface=vpn_request.wireguard.interface,
             public_key=vpn_request.wireguard.public_key,
             private_key=vpn_request.wireguard.private_key,
@@ -65,7 +59,7 @@ class VpnManager:
         if vpn_request.wireguard.ip_address not in _vpn.all_ip_addresses:
             raise ValueError(
                 f"IP address {vpn_request.wireguard.ip_address} is not in the address space "
-                f"{vpn_request.wireguard.address_space}."
+                f"{vpn_request.wireguard.ip_network}."
             )
         self._db_manager.add_vpn(_vpn)
 
@@ -151,7 +145,7 @@ class VpnManager:
                 ip_address=peer.wg_ip_address,
                 public_key=peer.public_key,
                 persistent_keepalive=peer.persistent_keepalive,
-                allowed_ips=_vpn.address_space,
+                allowed_ips=_vpn.ip_network,
                 tags=["imported"],
             )
             # Check if the peer already exists in the VPN

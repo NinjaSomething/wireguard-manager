@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, MagicMock
 import boto3
 import yaml
 from moto import mock_aws
@@ -42,7 +43,7 @@ def mock_peer_table(serverless_configuration):
         yield peer_table
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def mock_dynamo_db():
     with mock_aws():
         dynamo_db = DynamoDb(
@@ -53,7 +54,7 @@ def mock_dynamo_db():
     yield dynamo_db
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def mock_vpn_manager(mock_dynamo_db):
     vpn_manager = VpnManager(db_manager=mock_dynamo_db)
     yield vpn_manager
