@@ -2,6 +2,8 @@ from fastapi import Response, HTTPException
 from fastapi.responses import PlainTextResponse
 from uuid import uuid4
 from http import HTTPStatus
+
+from models.connection import ConnectionType
 from models.peers import PeerResponseModel, PeerRequestModel
 from vpn_manager.peers import Peer
 import logging
@@ -151,7 +153,7 @@ PrivateKey = {peer.private_key if peer.private_key else "[INSERT_PRIVATE_KEY]"}
 [Peer]
 PublicKey = {vpn.public_key}
 AllowedIPs = {peer.allowed_ips}
-Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info else "[INSERT_VPN_IP]"}:{vpn.listen_port}
+Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info and vpn.connection_info.type==ConnectionType.SSH else "[INSERT_VPN_IP]"}:{vpn.listen_port}
 PersistentKeepalive = {peer.persistent_keepalive}"""
     return response
 

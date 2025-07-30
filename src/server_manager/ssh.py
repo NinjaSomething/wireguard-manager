@@ -3,7 +3,7 @@ import typing
 from typing import Optional, List, Union
 import paramiko
 from io import StringIO
-from models.wireguard_connection import ConnectionModel
+from models.connection import ConnectionModel
 from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 import logging

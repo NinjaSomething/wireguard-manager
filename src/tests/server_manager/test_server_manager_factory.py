@@ -1,6 +1,6 @@
 import pytest
 from server_manager import server_manager_factory, ConnectionException
-from models.wireguard_connection import ConnectionType
+from models.connection import ConnectionType
 
 
 def test_server_manager_factory_ssh(monkeypatch):

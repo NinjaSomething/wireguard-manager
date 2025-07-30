@@ -4,9 +4,9 @@ from typing import Optional
 from pydantic import BaseModel
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
-from models.wireguard_connection import ConnectionType
+from models.connection import ConnectionType
 from vpn_manager.vpn import VpnServer
-from models.wireguard_connection import build_wireguard_connection_model, ConnectionModel
+from models.connection import build_wireguard_connection_model, ConnectionModel
 from databases.in_mem_db import InMemoryDataStore
 from environment import Environment
 

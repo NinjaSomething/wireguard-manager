@@ -1,7 +1,7 @@
 from databases.interface import AbstractDatabase
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
-from models.wireguard_connection import ConnectionModel, ConnectionType
+from models.connection import ConnectionModel, ConnectionType
 from vpn_manager.vpn import VpnServer
 from vpn_manager.peers import PeerList, Peer
 

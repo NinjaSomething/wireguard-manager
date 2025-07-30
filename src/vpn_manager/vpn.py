@@ -1,7 +1,7 @@
 from typing import Optional
 import ipaddress
 from models.vpn import WireguardModel, VpnModel
-from models.wireguard_connection import ConnectionModel
+from models.connection import ConnectionModel
 from vpn_manager.peers import Peer
 from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase

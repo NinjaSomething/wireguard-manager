@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 from typing import Optional
-from models.wireguard_connection import ConnectionModel
+from models.connection import ConnectionModel
 from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 import logging

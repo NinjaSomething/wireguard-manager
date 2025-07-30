@@ -38,6 +38,10 @@ class MockSsmCommand(MockCommand):
                 return_dict["Status"] = "Failed"
         elif "remove" in self.cmd and "wg set" in self.cmd:
             self._remove_peer(self.cmd)
+            return_dict["StandardOutputContent"] = ""
+            return_dict["Status"] = "Success"
         elif "wg set" in self.cmd:
             self._add_peer(self.cmd)
+            return_dict["StandardOutputContent"] = ""
+            return_dict["Status"] = "Success"
         return return_dict

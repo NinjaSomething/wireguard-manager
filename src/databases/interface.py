@@ -6,7 +6,7 @@ if typing.TYPE_CHECKING:
     from models.peers import PeerDbModel
     from vpn_manager.vpn import VpnServer
     from vpn_manager.peers import Peer
-    from models.wireguard_connection import ConnectionModel
+    from models.connection import ConnectionModel
 
 
 class AbstractDatabase(metaclass=abc.ABCMeta):

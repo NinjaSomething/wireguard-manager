@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
 from typing import Optional
-from models.wireguard_connection import ConnectionType
+from models.connection import ConnectionType
 from models.wg_server import WgServerPeerModel, WgServerModel
 
 if typing.TYPE_CHECKING:

@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from http import HTTPStatus
 import ipaddress
 from typing import Optional
-from models.wireguard_connection import ConnectionModel, ConnectionResponseModel
+from models.connection import ConnectionModel, ConnectionResponseModel
 from models import OpaqueModel
 
 

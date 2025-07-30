@@ -6,7 +6,7 @@ from setuptools.windows_support import hide_file
 
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnResponseModel, VpnPutModel
-from models.wireguard_connection import build_wireguard_connection_model, ConnectionModel
+from models.connection import build_wireguard_connection_model, ConnectionModel
 from models.peers import PeerResponseModel
 from vpn_manager import VpnUpdateException
 from server_manager import ConnectionException

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from models.ssm import SsmConnectionModel
 from server_manager.ssm import SsmConnection, ConnectionException
-from models.wireguard_connection import ConnectionModel, ConnectionType
+from models.connection import ConnectionModel, ConnectionType
 from models.wg_server import WgServerModel
 from vpn_manager.peers import Peer
 from botocore.exceptions import ClientError
