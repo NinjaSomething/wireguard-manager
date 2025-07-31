@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, SecretStr, field_serializer
+from pydantic import Field, SecretStr, field_serializer, BaseModel
 from typing import Optional
+
 from models import OpaqueModel
 
 

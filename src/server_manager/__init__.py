@@ -22,13 +22,17 @@ def server_manager_factory(connection_type: ConnectionType) -> AbstractServerMan
         from server_manager.ssh import SshConnection
 
         return SshConnection()
+    elif connection_type == ConnectionType.SSM:
+        from server_manager.ssm import SsmConnection
+
+        return SsmConnection()
     else:
         raise ValueError(f"Unsupported connection type: {connection_type}")
 
 
 def extract_wg_server_config(wg_interface, wg_config: list[str]) -> Optional[WgServerModel]:
     """
-    This will extract the WireGuard server configuration from the output of a wireguard dump command.  The
+    This will extract the WireGuard server configuration from the output of a wireguard dump cmd.  The
       following defines the dump format:
 
     Several lines are returned; the first contains in order separated by tab:
