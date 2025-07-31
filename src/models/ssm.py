@@ -7,8 +7,8 @@ from models import OpaqueModel
 # Models for the SSM class
 class SsmConnectionModel(BaseModel):
     target_id: str = Field(..., description="The ID of the EC2 instance to connect to")
-    aws_access_key_id: Optional[str] = Field(..., description="The AWS access key ID")
-    aws_secret_access_key: Optional[str] = Field(..., description="The AWS secret access key")
+    aws_access_key_id: Optional[str] = Field(None, description="The AWS access key ID")
+    aws_secret_access_key: Optional[str] = Field(None, description="The AWS secret access key")
     region: Optional[str] = Field("us-west-2", description="The AWS region to connect to")
 
 
