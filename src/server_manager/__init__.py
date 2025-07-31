@@ -22,7 +22,7 @@ def server_manager_factory(connection_type: ConnectionType) -> AbstractServerMan
         from server_manager.ssh import SshConnection
 
         return SshConnection()
-    if connection_type == ConnectionType.SSM:
+    elif connection_type == ConnectionType.SSM:
         from server_manager.ssm import SsmConnection
 
         return SsmConnection()
