@@ -43,6 +43,17 @@ def mock_peer_table(serverless_configuration):
 
 
 @pytest.fixture(scope="class")
+def mock_peer_history_table(serverless_configuration):
+    with mock_aws():
+        table_config = serverless_configuration["WireguardManagerPeersHistoryTable"]["Properties"]
+        # override table name
+        table_config["TableName"] = f"wireguard-manager-peers-history-{Environment.STAGING.value}"
+        conn = boto3.resource("dynamodb", region_name="us-west-2")
+        peer_table = conn.create_table(**table_config)
+        yield peer_table
+
+
+@pytest.fixture(scope="class")
 def mock_dynamo_db():
     with mock_aws():
         dynamo_db = DynamoDb(

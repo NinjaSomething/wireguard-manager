@@ -110,6 +110,9 @@ resources: # CloudFormation template syntax
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
 configValidationMode: error
 # The sections below are used for development
 plugins:

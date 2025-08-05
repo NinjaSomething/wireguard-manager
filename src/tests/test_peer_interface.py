@@ -59,6 +59,7 @@ class TestPeerInterface:
         mock_exec_command,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_vpn_manager,
         mock_dynamo_db,
         test_input,
@@ -133,6 +134,7 @@ class TestPeerInterface:
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Try adding a peer successfully."""
@@ -480,6 +482,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Try adding a peer but have the server auto-generate the keys and IP address"""
@@ -765,6 +768,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Importing peers from the wireguard server."""
@@ -870,6 +874,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Delete a peer."""

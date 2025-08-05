@@ -18,6 +18,7 @@ from interfaces.vpn import validate_vpn_exists
 
 log = logging.getLogger(__name__)
 peer_router = WgAPIRouter()
+ipv4_regex = r"^(?:25[0-5]|2[0-4]\d|1?\d{1,2})(?:\.(?:25[0-5]|2[0-4]\d|1?\d{1,2})){3}$"
 
 
 def validate_peer_exists(vpn_name: str, ip_address: str, vpn_manager) -> None:
@@ -126,7 +127,7 @@ def delete_peer(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
 ) -> Response:
     """Delete a peer from a VPN."""
     vpn_manager = peer_router.vpn_manager
@@ -151,7 +152,7 @@ def get_peer(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     hide_secrets: bool = True,
 ) -> PeerResponseModel:
     """Return the peer with the given IP address on a given VPN."""
@@ -167,7 +168,7 @@ def get_peer_wg_config(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
 ):
     """Return the wireguard configuration for a peer on a given VPN."""
     vpn_manager = peer_router.vpn_manager
@@ -214,7 +215,7 @@ def generate_new_wireguard_keys(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
 ) -> PeerResponseModel:
     """Generate new WireGuard keys for a peer."""
     server_manager = None
@@ -266,7 +267,7 @@ def add_tag_to_peer(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     tag: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
@@ -283,7 +284,7 @@ def delete_tag_from_peer(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     tag: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
@@ -302,7 +303,7 @@ def get_peer_history_ip_address(
     vpn_name: str = Path(
         ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
-    ip_address: IPv4Address = Path(..., description="Must be a valid IPv4 address"),
+    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     start_time: datetime = None,
     end_time: datetime = None,
 ) -> list[PeerHistoryResponseModel]:
