@@ -75,6 +75,41 @@ resources:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         TableName: wireguard-manager-peers-${self:provider.stage}
+    WireguardManagerPeersHistoryTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: wireguard-manager-peers-history-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: peer_history_id
+            AttributeType: S
+          - AttributeName: timestamp
+            AttributeType: N
+          - AttributeName: vpn_name_ip_addr
+            AttributeType: S
+          - AttributeName: vpn_name_tag
+            AttributeType: S
+        KeySchema:
+          - AttributeName: peer_history_id
+            KeyType: HASH
+          - AttributeName: timestamp
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: GSI-byIp
+            KeySchema:
+              - AttributeName: vpn_name_ip_addr
+                KeyType: HASH
+              - AttributeName: timestamp
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: GSI-byTag
+            KeySchema:
+              - AttributeName: vpn_name_tag
+                KeyType: HASH
+              - AttributeName: timestamp
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
 configValidationMode: error
 plugins:
   - serverless-dynamodb

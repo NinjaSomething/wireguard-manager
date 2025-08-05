@@ -1,8 +1,10 @@
 from __future__ import annotations
 import abc
-import typing
+from typing import Optional, TYPE_CHECKING
 
-if typing.TYPE_CHECKING:
+from models.peer_history import PeerHistoryResponseModel
+
+if TYPE_CHECKING:
     from models.peers import PeerDbModel
     from vpn_manager.vpn import VpnServer
     from vpn_manager.peers import Peer
@@ -68,4 +70,16 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
+        pass
+
+    @abc.abstractmethod
+    def get_tag_history_endpoint(
+        self, vpn_name: str, tag: str, start_time: Optional[str] = None, end_time: Optional[str] = None
+    ) -> list[PeerHistoryResponseModel]:
+        pass
+
+    @abc.abstractmethod
+    def get_peer_history_endpoint(
+        self, vpn_name: str, ip_address: str, start_time: Optional[str] = None, end_time: Optional[str] = None
+    ) -> list[PeerHistoryResponseModel]:
         pass

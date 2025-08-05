@@ -1,7 +1,10 @@
+from datetime import datetime
+from http import HTTPStatus
+from uuid import uuid4
+
 from fastapi import Response, HTTPException
 from fastapi.responses import PlainTextResponse
-from uuid import uuid4
-from http import HTTPStatus
+from models.peer_history import PeerHistoryResponseModel
 from models.peers import PeerResponseModel, PeerRequestModel
 from vpn_manager.peers import Peer
 import logging
@@ -233,3 +236,55 @@ def delete_tag_from_peer(vpn_name: str, ip_address: str, tag: str) -> PeerRespon
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
     vpn_manager.delete_tag_from_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
     return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+
+
+@peer_router.get(
+    "/vpn/{vpn_name}/peer/{ip_address}/history", tags=["peer-history"], response_model=list[PeerHistoryResponseModel]
+)
+def get_peer_history_ip_address(
+    vpn_name: str, ip_address: str, start_time: datetime = None, end_time: datetime = None
+) -> list[PeerHistoryResponseModel]:
+    """Get the history of a peer."""
+    vpn_manager = peer_router.vpn_manager
+    start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
+    end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
+
+    if start_time_ns and end_time_ns and start_time_ns >= end_time_ns:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Start time must be before end time.",
+        )
+
+    peer_history = vpn_manager.get_peer_history_endpoint(vpn_name, ip_address, start_time_ns, end_time_ns)
+    if not peer_history:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"No peer history found with IP address {ip_address} in VPN {vpn_name}",
+        )
+    return [PeerHistoryResponseModel(**history.dict()) for history in reversed(peer_history)]
+
+
+@peer_router.get(
+    "/vpn/{vpn_name}/tag/{tag}/history", tags=["tag-history"], response_model=list[PeerHistoryResponseModel]
+)
+def get_tag_history_tag(
+    vpn_name: str, tag: str, start_time: datetime = None, end_time: datetime = None
+) -> list[PeerHistoryResponseModel]:
+    """Get the history of a peer by tag."""
+    vpn_manager = peer_router.vpn_manager
+    start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
+    end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
+
+    if start_time_ns and end_time_ns and start_time_ns >= end_time_ns:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Start time must be before end time.",
+        )
+
+    tag_history = vpn_manager.get_tag_history_endpoint(vpn_name, tag, start_time_ns, end_time_ns)
+    if not tag_history:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"No tag_history found with tag {tag} in VPN {vpn_name}",
+        )
+    return [PeerHistoryResponseModel(**history.dict()) for history in reversed(tag_history)]
