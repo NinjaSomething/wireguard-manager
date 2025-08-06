@@ -1,3 +1,5 @@
+from itertools import count
+
 import pytest
 from unittest.mock import patch, MagicMock
 import boto3
@@ -18,6 +20,21 @@ def serverless_configuration():
     with open("serverless-v4/serverless.yml", "r") as f:
         config = yaml.safe_load(f)
     return config["resources"]["Resources"]
+
+
+START_TS = 1_626_000_000_000_000_000
+ONE_SEC_NS = 1_000_000_000
+ts_counter = count(START_TS, ONE_SEC_NS)
+
+
+@pytest.fixture(scope="class", autouse=True)
+def incr_time_ns():
+    """
+    Before any test in the class runs, patch time.time_ns to return
+    next(ts_counter) on each call.
+    """
+    with patch("time.time_ns", side_effect=lambda: next(ts_counter)):
+        yield
 
 
 @pytest.fixture(scope="class")

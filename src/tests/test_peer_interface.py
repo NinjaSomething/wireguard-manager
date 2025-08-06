@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import pytest
 from pydantic import SecretStr
+import datetime
 
 from app import app, vpn_router
 from models.ssh import SshConnectionModel
@@ -936,3 +937,124 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert response.status_code == HTTPStatus.OK
         all_vpns = mock_dynamo_db.get_all_vpns()
         assert all_vpns == []
+
+    def test_peer_history_invalid_time(
+        self,
+        test_input,
+        mock_exec_command,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_peer_history_table,
+        mock_dynamo_db,
+    ):
+        """Test peer history endpoint with invalid start/end time."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.2"
+        now = datetime.datetime.now()
+        start = now
+        end = now - datetime.timedelta(hours=1)
+        response = client.get(
+            f"/vpn/{vpn.name}/peer/{ip}/history",
+            params={"start_time": start.isoformat(), "end_time": end.isoformat()},
+        )
+        assert response.status_code == 400
+        assert "Start time must be before end time" in response.text
+
+    def test_tag_history_invalid_time(self, test_input, mock_vpn_manager):
+        """Test tag history endpoint with invalid start/end time."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "tag1"
+        now = datetime.datetime.now()
+        start = now
+        end = now - datetime.timedelta(hours=1)
+        response = client.get(
+            f"/vpn/{vpn.name}/tag/{tag}/history",
+            params={"start_time": start.isoformat(), "end_time": end.isoformat()},
+        )
+        assert response.status_code == 400
+        assert "Start time must be before end time" in response.text
+
+    def test_peer_history_no_history(self, test_input, mock_vpn_manager):
+        """Test peer history endpoint when there is no history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.99"
+        response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
+        assert response.status_code == 404
+        assert "No peer history found" in response.text
+
+    def test_tag_history_no_history(self, test_input, mock_vpn_manager):
+        """Test tag history endpoint when there is no history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "nope"
+        response = client.get(f"/vpn/{vpn.name}/tag/{tag}/history")
+        assert response.status_code == 404
+        assert "No tag_history found" in response.text
+
+    def test_peer_history_all(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test peer history endpoint returns all history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.2"
+        response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
+        assert response.status_code == 200
+        data = response.json()
+        # Assert all entries contains the expect ip address
+        assert all(d["ip_address"] == ip for d in data)
+        # Assert the entries are in descending order by timestamp
+        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+
+    def test_tag_history_all(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test tag history endpoint returns all history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "tag1"
+        response = client.get(f"/vpn/{vpn.name}/tag/{tag}/history")
+        assert response.status_code == 200
+        data = response.json()
+        # Assert all entries contains the expected tag
+        assert all(tag in d["tags"] for d in data)
+        # Assert the entries are in descending order by timestamp
+        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+
+    def test_peer_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test peer history endpoint with start/end time filters."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.2"
+        start = 1626000000000000000
+        end = 1626000003000000000
+        response = client.get(
+            f"/vpn/{vpn.name}/peer/{ip}/history",
+            params={"start_time": start / 1_000_000_000, "end_time": end / 1_000_000_000},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 3
+        # Assert all entries contains the expect ip address
+        assert all(d["ip_address"] == ip for d in data)
+        # Assert the entries are in descending order by timestamp
+        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+
+    def test_tag_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test tag history endpoint with start/end time filters."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "tag1"
+        start = 1626000000000000000
+        end = 1626000003000000000
+        response = client.get(
+            f"/vpn/{vpn.name}/tag/{tag}/history",
+            params={"start_time": start / 1_000_000_000, "end_time": end / 1_000_000_000},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 4
+        # Assert all entries contains the expected tag
+        assert all(tag in d["tags"] for d in data)
+        # Assert the entries are in descending order by timestamp
+        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
