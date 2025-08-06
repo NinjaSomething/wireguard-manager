@@ -1,4 +1,4 @@
-from fastapi import Response, HTTPException
+from fastapi import Response, HTTPException, Path
 from http import HTTPStatus
 from typing import Optional
 
@@ -37,7 +37,13 @@ def get_all_vpns(hide_secrets: bool = True) -> list[VpnResponseModel]:
 
 
 @vpn_router.put("/vpn/{name}", tags=["vpn"])
-def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Response:
+def add_vpn(
+    vpn: VpnPutModel,
+    name: str = Path(
+        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+    ),
+    description: Optional[str] = "",
+) -> Response:
     """
     Add an existing VPN to the Wireguard Manager.  When this is done, clients can be added to the VPN using this service.
     """
@@ -60,7 +66,12 @@ def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Res
 
 
 @vpn_router.put("/vpn/{name}/connection-info", tags=["vpn"])
-def update_ssh(name: str, connection_info: ConnectionModel) -> list[PeerResponseModel]:
+def update_ssh(
+    connection_info: ConnectionModel,
+    name: str = Path(
+        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+    ),
+) -> list[PeerResponseModel]:
     """
     Update the SSH connection information for a VPN server.  This is used to connect to the VPN server to add and
     remove peers.  This will automatically sync peers on the wireguard server into the wireguard manager.
@@ -107,7 +118,12 @@ def delete_vpn(name: str) -> Response:
 
 
 @vpn_router.get("/vpn/{name}", tags=["vpn"], response_model=VpnResponseModel)
-def get_vpn(name: str, hide_secrets: bool = True) -> VpnResponseModel:
+def get_vpn(
+    name: str = Path(
+        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+    ),
+    hide_secrets: bool = True,
+) -> VpnResponseModel:
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)

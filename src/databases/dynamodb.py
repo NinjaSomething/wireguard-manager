@@ -1,7 +1,16 @@
+import logging
+import time
+from itertools import groupby
+from uuid import uuid4
+
 import boto3
 from typing import Optional
 
-from pydantic import BaseModel
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ParamValidationError, ClientError
+from pydantic import BaseModel, ValidationError
+
+from models.peer_history import PeerHistoryResponseModel
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionType
@@ -9,6 +18,8 @@ from vpn_manager.vpn import VpnServer
 from models.connection import build_connection_model, ConnectionModel
 from databases.in_mem_db import InMemoryDataStore
 from environment import Environment
+
+logger = logging.getLogger(__name__)
 
 
 class VpnDynamoModel(BaseModel):
@@ -23,15 +34,26 @@ class VpnDynamoModel(BaseModel):
     connection_info: dict | None
 
 
-class PeerDynamoModel(BaseModel):
-    peer_id: str
+class PeerBaseModel(BaseModel):
     vpn_name: str
     ip_address: str
     public_key: str
     private_key: Optional[str] = None
     persistent_keepalive: int
     allowed_ips: str
+
+
+class PeerDynamoModel(PeerBaseModel):
+    peer_id: str
     tags: list[str]
+
+
+class PeerHistoryDynamoModel(PeerBaseModel):
+    peer_history_id: str
+    timestamp: int
+    vpn_name_ip_addr: str
+    vpn_name_tag: str
+    tag: Optional[str]
 
 
 class DynamoDb(InMemoryDataStore):
@@ -53,6 +75,7 @@ class DynamoDb(InMemoryDataStore):
                 dynamodb = boto3.resource("dynamodb", region_name=aws_region)
         self.vpn_table = dynamodb.Table(f"wireguard-manager-vpn-servers-{environment.value}")
         self.peer_table = dynamodb.Table(f"wireguard-manager-peers-{environment.value}")
+        self.peer_history_table = dynamodb.Table(f"wireguard-manager-peers-history-{environment.value}")
         self._init_vpn_from_db()
         self._init_peers_from_db()
 
@@ -164,6 +187,8 @@ class DynamoDb(InMemoryDataStore):
         response = self.peer_table.put_item(Item=peer_dynamo.dict())
         # TODO: Handle failure response
         super().add_peer(vpn_name, peer)
+        # Write the peer history
+        self.write_peer_history(vpn_name, peer)
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
         response = self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
@@ -182,6 +207,8 @@ class DynamoDb(InMemoryDataStore):
                 ReturnValues="UPDATED_NEW",
             )
             # TODO: Handle failure response
+            # Write the peer history
+            self.write_peer_history(vpn_name, peer.to_db_model())
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete tag from a peer."""
@@ -195,6 +222,8 @@ class DynamoDb(InMemoryDataStore):
                 ReturnValues="UPDATED_NEW",
             )
             # TODO: Handle failure response
+            # Write the peer history
+            self.write_peer_history(vpn_name, peer.to_db_model())
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
@@ -215,3 +244,164 @@ class DynamoDb(InMemoryDataStore):
             ReturnValues="UPDATED_NEW",
         )
         # TODO: Handle failure response
+
+    def write_peer_to_history(self, peer: PeerHistoryDynamoModel):
+        """
+        Write the peer history to the peer history table.
+        """
+        try:
+            item = peer.model_dump()
+            self.peer_history_table.put_item(Item=item)
+        except ParamValidationError as e:
+            # e.g. invalid types or missing required fields
+            logger.exception("Invalid item payload for DynamoDB: %r", item)
+            raise ValueError("Peer model has invalid data") from e
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            msg = e.response["Error"]["Message"]
+            logger.error("DynamoDB ClientError %s: %s", code, msg)
+            raise
+        except Exception as e:
+            # catch anything else (network issue, etc.)
+            logger.exception("Unexpected error writing to DynamoDB")
+            raise
+
+    def get_peer_history(
+        self, vpn_name: str, ip_address: str, start_time: Optional[str] = None, end_time: Optional[str] = None
+    ) -> list[PeerHistoryDynamoModel]:
+        """
+        Hit the peer history table and return the peer history based on ip_address.
+        """
+        key = f"{vpn_name}#{ip_address}"
+        if start_time is not None and end_time is not None:
+            resp = self.peer_history_table.query(
+                IndexName="GSI-byIp",
+                KeyConditionExpression=Key("vpn_name_ip_addr").eq(key) & Key("timestamp").between(start_time, end_time),
+                ScanIndexForward=False,
+            )
+        else:
+            resp = self.peer_history_table.query(
+                IndexName="GSI-byIp", KeyConditionExpression=Key("vpn_name_ip_addr").eq(key), ScanIndexForward=False
+            )
+        db_items = resp.get("Items", [])
+
+        peers_history = []
+        try:
+            for item in db_items:
+                peer_tag_history = PeerHistoryDynamoModel.model_validate(item)
+                peers_history.append(peer_tag_history)
+        except ValidationError as e:
+            logger.error("Validation error while processing peer history items: %s", e)
+            raise ValueError("Peer history items have invalid data") from e
+        return peers_history
+
+    def get_tag_history(
+        self, vpn_name: str, tag: str, start_time: Optional[str] = None, end_time: Optional[str] = None
+    ) -> list[PeerHistoryDynamoModel]:
+        """
+        Hit the peer history table. Group peers together and return combined peer history based on tag.
+        """
+        key = f"{vpn_name}#{tag}"
+
+        if start_time is not None and end_time is not None:
+            # Add time range filtering if provided
+            resp = self.peer_history_table.query(
+                IndexName="GSI-byTag",
+                KeyConditionExpression=Key("vpn_name_tag").eq(key) & Key("timestamp").between(start_time, end_time),
+                ScanIndexForward=False,
+            )
+        else:
+            resp = self.peer_history_table.query(
+                IndexName="GSI-byTag", KeyConditionExpression=Key("vpn_name_tag").eq(key), ScanIndexForward=False
+            )
+        db_items = resp.get("Items", [])
+
+        peers_tag_history = []
+        try:
+            for item in db_items:
+                peer_tag_history = PeerHistoryDynamoModel.model_validate(item)
+                peers_tag_history.append(peer_tag_history)
+        except ValidationError as e:
+            logger.error("Validation error while processing peer tag history items: %s", e)
+            raise ValueError("Peer history items have invalid data") from e
+        return peers_tag_history
+
+    def _compress_history_by_timestamp(self, items: list[PeerHistoryDynamoModel]) -> list[PeerHistoryResponseModel]:
+        """
+        Collapse PeerHistoryDynamoModel items by timestamp only,
+        concatenating all tags for each timestamp.
+        """
+        # 1. Sort by timestamp
+        items_sorted = sorted(items, key=lambda it: it.timestamp)
+
+        result = []
+        # 2. Group by timestamp
+        for ts, group in groupby(items_sorted, key=lambda it: it.timestamp):
+            group_list = list(group)
+            first = group_list[0]
+
+            # collect tags for this timestamp
+            tags = [it.tag for it in group_list]
+
+            # build the response
+            response = PeerHistoryResponseModel(
+                ip_address=first.ip_address,
+                allowed_ips=first.allowed_ips,
+                public_key=first.public_key,
+                private_key=first.private_key if first.private_key else None,
+                persistent_keepalive=first.persistent_keepalive,
+                tags=tags,
+                timestamp=ts,
+            )
+            result.append(response)
+
+        return result
+
+    def get_tag_history_endpoint(
+        self, vpn_name: str, tag: str, start_time: Optional[int] = None, end_time: Optional[int] = None
+    ) -> list[PeerHistoryResponseModel]:
+        tag_history = self.get_tag_history(vpn_name, tag, start_time, end_time)
+        return self._compress_history_by_timestamp(items=tag_history)
+
+    def get_peer_history_endpoint(
+        self, vpn_name: str, ip_address: str, start_time: Optional[int] = None, end_time: Optional[int] = None
+    ) -> list[PeerHistoryResponseModel]:
+        peer_history = self.get_peer_history(vpn_name, ip_address, start_time, end_time)
+        return self._compress_history_by_timestamp(items=peer_history)
+
+    def write_peer_history(self, vpn_name: str, peer: PeerDbModel):
+        """
+        Write the peer history to the peer history table.
+        """
+        timestamp = int(time.time_ns())
+        if len(peer.tags) > 0:
+            for tag in peer.tags:
+                peer_history = PeerHistoryDynamoModel(
+                    vpn_name=vpn_name,
+                    ip_address=peer.ip_address,
+                    public_key=peer.public_key,
+                    private_key=peer.private_key,
+                    persistent_keepalive=peer.persistent_keepalive,
+                    allowed_ips=peer.allowed_ips,
+                    peer_history_id=uuid4().hex,
+                    timestamp=timestamp,
+                    vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
+                    vpn_name_tag=f"{vpn_name}#{tag}",
+                    tag=tag,
+                )
+                self.write_peer_to_history(peer_history)
+        else:
+            peer_history = PeerHistoryDynamoModel(
+                vpn_name=vpn_name,
+                ip_address=peer.ip_address,
+                public_key=peer.public_key,
+                private_key=peer.private_key,
+                persistent_keepalive=peer.persistent_keepalive,
+                allowed_ips=peer.allowed_ips,
+                peer_history_id=uuid4().hex,
+                timestamp=timestamp,
+                vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
+                vpn_name_tag=f"{vpn_name}#",
+                tag=None,
+            )
+            self.write_peer_to_history(peer_history)
