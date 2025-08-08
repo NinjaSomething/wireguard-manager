@@ -5,7 +5,7 @@ import paramiko
 from io import StringIO
 from models.connection import ConnectionModel
 from models.wg_server import WgServerModel
-from vpn_manager.peers import Peer
+from models.peers import PeerRequestModel, PeerDbModel
 import logging
 from server_manager import ConnectionException, extract_wg_server_config
 from server_manager.interface import AbstractServerManager
@@ -69,14 +69,14 @@ class SshConnection(AbstractServerManager):
             result = wg_dump_response
         return result
 
-    def remove_peer(self, vpn: VpnServer, peer: Peer):
+    def remove_peer(self, vpn: VpnServer, peer: PeerDbModel):
         """Remove a peer from the VPN server"""
         cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssh_response, str):
             raise ConnectionException(f"Failed to remove peer from vpn: {ssh_response}")
 
-    def add_peer(self, vpn: VpnServer, peer: Peer):
+    def add_peer(self, vpn: VpnServer, peer: PeerRequestModel):
         """Add a peer to the VPN server"""
         cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)

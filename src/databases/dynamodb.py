@@ -175,12 +175,11 @@ class DynamoDb(InMemoryDataStore):
         """Delete tag from a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag in peer.tags:
-            new_tags = deepcopy(peer.tags)
-            new_tags.remove(tag)
+            peer.tags.remove(tag)
             response = self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
-                ExpressionAttributeValues={":newTags": new_tags},
+                ExpressionAttributeValues={":newTags": peer.tags},
                 ReturnValues="UPDATED_NEW",
             )
             # TODO: Handle failure response
