@@ -5,7 +5,6 @@ import typing
 if typing.TYPE_CHECKING:
     from models.peers import PeerDbModel
     from vpn_manager.vpn import VpnServer
-    from vpn_manager.peers import Peer
     from models.connection import ConnectionModel
 
 
@@ -46,12 +45,17 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_peers(self, vpn_name: str) -> list[Peer]:
+    def get_peers(self, vpn_name: str) -> list[PeerDbModel]:
         """Return a list of peers for a given VPN network."""
         pass
 
     @abc.abstractmethod
-    def get_peer(self, vpn_name: str, peer_ip: str) -> Peer:
+    def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[PeerDbModel]:
+        """Return a list of peers for a given VPN network by tag."""
+        pass
+
+    @abc.abstractmethod
+    def get_peer(self, vpn_name: str, peer_ip: str) -> PeerDbModel:
         """Return a specific peer from the database.  If the peer does not exist, return None."""
         pass
 

@@ -1,9 +1,7 @@
 from fastapi import Response, HTTPException
 from fastapi.responses import PlainTextResponse
-from uuid import uuid4
 from http import HTTPStatus
 from models.peers import PeerResponseModel, PeerRequestModel
-from vpn_manager.peers import Peer
 import logging
 from interfaces.custom_router import WgAPIRouter
 from server_manager import server_manager_factory, ConnectionException
@@ -29,12 +27,12 @@ def validate_peer_exists(vpn_name: str, ip_address: str, vpn_manager) -> None:
 
 
 @peer_router.get("/vpn/{vpn_name}/peers", tags=["peers"], response_model=list[PeerResponseModel])
-def get_peers(vpn_name: str, hide_secrets: bool = True) -> Response:
+def get_peers(vpn_name: str, hide_secrets: bool = True) -> list[PeerResponseModel]:
     """Get all the peers for a given VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
-    vpn = vpn_manager.get_vpn(vpn_name)
-    peer_models = vpn.peers.to_model()
+    peers_db = vpn_manager.get_all_peers(vpn_name)
+    peer_models = [PeerResponseModel(**peer.model_dump()) for peer in peers_db]
     for peer_model in peer_models:
         peer_model.opaque = hide_secrets
     return peer_models
@@ -54,7 +52,9 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
         # Generate the key-pair
         peer.private_key, peer.public_key = vpn_manager.generate_wireguard_keys()
 
-    for existing_peer in vpn.peers:
+    vpn_peers = vpn_manager.get_all_peers(vpn_name)
+
+    for existing_peer in vpn_peers:
         # Verify the IP address is not already in use on this VPN
         if existing_peer.ip_address == peer.ip_address:
             raise HTTPException(
@@ -85,25 +85,15 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
             detail=f"Allowed IPs Error: {ex}",
         )
 
-    # Create a new peer
-    new_peer = Peer(
-        peer_id=str(uuid4()),
-        ip_address=peer.ip_address,
-        public_key=peer.public_key,
-        private_key=peer.private_key,
-        persistent_keepalive=peer.persistent_keepalive,
-        allowed_ips=peer.allowed_ips,
-        tags=peer.tags,
-    )
     if vpn.connection_info is not None:
         try:
             server_manager = server_manager_factory(vpn.connection_info.type)
-            server_manager.add_peer(vpn, new_peer)
+            server_manager.add_peer(vpn, peer)
         except ConnectionException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
-    vpn_manager.add_peer(vpn_name, new_peer)
+    vpn_manager.add_peer(vpn_name, peer)
     vpn.calculate_available_ips()
-    return new_peer.to_model()
+    return PeerResponseModel(**peer.model_dump())
 
 
 @peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"])
@@ -131,7 +121,8 @@ def get_peer(vpn_name: str, ip_address: str, hide_secrets: bool = True) -> PeerR
     """Return the peer with the given IP address on a given VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
-    peer_model = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+    peer_db_model = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
+    peer_model = PeerResponseModel(**peer_db_model.model_dump())
     peer_model.opaque = hide_secrets
     return peer_model
 
@@ -162,7 +153,7 @@ def get_peer_by_tag(vpn_name: str, tag: str, hide_secrets: bool = True) -> list[
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     peers = vpn_manager.get_peers_by_tag(vpn_name=vpn_name, tag=tag)
-    peer_models = [peer.to_model() for peer in peers]
+    peer_models = [PeerResponseModel(**peer.model_dump()) for peer in peers]
     for peer_model in peer_models:
         peer_model.opaque = hide_secrets
     return peer_models
@@ -192,7 +183,7 @@ def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerResponseM
             server_manager.add_peer(vpn, peer)
         except ConnectionException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
-    peer_response = peer.to_model()
+    peer_response = PeerResponseModel(**peer.model_dump())
     peer_response.opaque = False  # Hide secrets in the response
     return peer_response
 
@@ -214,7 +205,7 @@ def import_vpn_peers(vpn_name: str) -> list[PeerResponseModel]:
         added_peers = vpn_manager.import_peers(vpn_name)
     except VpnUpdateException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
-    return [peer.to_model() for peer in added_peers]
+    return [PeerResponseModel(**peer.model_dump()) for peer in added_peers]
 
 
 @peer_router.put("/vpn/{vpn_name}/peer/{ip_address}/tag/{tag}", tags=["peers"], response_model=PeerResponseModel)
@@ -223,7 +214,7 @@ def add_tag_to_peer(vpn_name: str, ip_address: str, tag: str) -> PeerResponseMod
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
     vpn_manager.add_tag_to_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
-    return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+    return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 
 
 @peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}/tag/{tag}", tags=["peers"], response_model=PeerResponseModel)
@@ -232,4 +223,4 @@ def delete_tag_from_peer(vpn_name: str, ip_address: str, tag: str) -> PeerRespon
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
     vpn_manager.delete_tag_from_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
-    return vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).to_model()
+    return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())

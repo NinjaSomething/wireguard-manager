@@ -1,12 +1,11 @@
-import ipaddress
 import codecs
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 import logging
 from uuid import uuid4
 from databases.interface import AbstractDatabase
+from models.peers import PeerDbModel, PeerRequestModel
 from vpn_manager.vpn import VpnServer
-from vpn_manager.peers import PeerList, Peer
 from models.vpn import VpnPutModel
 from server_manager import server_manager_factory
 
@@ -54,7 +53,6 @@ class VpnManager:
             private_key=vpn_request.wireguard.private_key,
             listen_port=vpn_request.wireguard.listen_port,
             connection_info=vpn_request.connection_info,
-            peers=PeerList(name, self._db_manager),
         )
         if vpn_request.wireguard.ip_address not in _vpn.all_ip_addresses:
             raise ValueError(
@@ -72,40 +70,30 @@ class VpnManager:
     def remove_vpn(self, name: str):
         _vpn = self.get_vpn(name)
         if _vpn is not None:
-            _vpn.peers.clear()
             self._db_manager.delete_vpn(name)
 
-    def add_peer(self, vpn_name: str, peer: Peer):
+    def add_peer(self, vpn_name: str, peer: PeerRequestModel):
         """This will add the peer to the database"""
-        vpn = self.get_vpn(vpn_name)
-        self._db_manager.add_peer(vpn_name=vpn_name, peer=peer.to_db_model())
-        vpn.peers.append(peer)
+        self._db_manager.add_peer(vpn_name=vpn_name, peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())))
 
-    def get_peers_by_ip(self, vpn_name: str, ip_address: str) -> Peer | None:
-        _vpn = self.get_vpn(vpn_name)
-        if _vpn is None:
-            return None
-        else:
-            for peer in _vpn.peers:
-                if ip_address == peer.ip_address:
-                    return peer
-        return None
+    def get_all_peers(self, vpn_name: str) -> list[PeerDbModel]:
+        """
+        Get all peers for a given VPN.
+        :param vpn_name: The name of the VPN to get peers for.
+        :return: A list of PeerDbModel objects representing the peers.
+        """
+        return self._db_manager.get_peers(vpn_name)
 
-    def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[Peer]:
-        matching_tags = []
-        _vpn = self.get_vpn(vpn_name)
-        if _vpn is None:
-            return []
-        else:
-            for peer in _vpn.peers:
-                if tag in peer.tags:
-                    matching_tags.append(peer)
-        return matching_tags
+    def get_peers_by_ip(self, vpn_name: str, ip_address: str) -> PeerDbModel | None:
+        return self._db_manager.get_peer(vpn_name, ip_address)
+
+    def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[PeerDbModel]:
+        return self._db_manager.get_peers_by_tag(vpn_name, tag)
 
     def delete_peer(self, vpn_name: str, ip_address: str):
         peer = self.get_peers_by_ip(vpn_name, ip_address)
         if peer:
-            self._db_manager.delete_peer(vpn_name, peer.to_db_model())
+            self._db_manager.delete_peer(vpn_name, peer)
 
     @staticmethod
     def generate_wireguard_keys() -> tuple[str, str]:
@@ -130,13 +118,13 @@ class VpnManager:
 
         return private_key_str, public_key_str
 
-    def generate_new_peer_keys(self, vpn_name: str, peer: Peer):
-        self._db_manager.delete_peer(vpn_name, peer.to_db_model())
+    def generate_new_peer_keys(self, vpn_name: str, peer: PeerDbModel):
+        self._db_manager.delete_peer(vpn_name, peer)
         peer.private_key, peer.public_key = self.generate_wireguard_keys()
-        self._db_manager.add_peer(vpn_name, peer.to_db_model())
+        self._db_manager.add_peer(vpn_name, peer)
         return peer
 
-    def import_peers(self, vpn_name: str) -> list[Peer]:
+    def import_peers(self, vpn_name: str) -> list[PeerRequestModel]:
         # This downloads the wireguard server config and extracts the data.
         _vpn = self.get_vpn(vpn_name)
         server_manager = server_manager_factory(_vpn.connection_info.type)
@@ -146,8 +134,7 @@ class VpnManager:
 
         add_peers = []
         for peer in wg_config_data.peers:
-            import_peer = Peer(
-                peer_id=str(uuid4()),
+            import_peer = PeerRequestModel(
                 ip_address=peer.wg_ip_address,
                 public_key=peer.public_key,
                 persistent_keepalive=peer.persistent_keepalive,
@@ -156,13 +143,14 @@ class VpnManager:
             )
             # Check if the peer already exists in the VPN
             skip_peer = False
-            for existing_peer in _vpn.peers:
+            for existing_peer in self._db_manager.get_peers(vpn_name):
                 if existing_peer.ip_address == import_peer.ip_address:
                     log.warning(f"Skipping import of peer {import_peer.ip_address} as it already exists.")
                     skip_peer = True
 
             if not skip_peer:
                 self.add_peer(vpn_name, import_peer)
+                add_peers.append(import_peer)
         _vpn.calculate_available_ips()
 
         return add_peers

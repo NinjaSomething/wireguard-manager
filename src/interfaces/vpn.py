@@ -2,8 +2,6 @@ from fastapi import Response, HTTPException
 from http import HTTPStatus
 from typing import Optional
 
-from setuptools.windows_support import hide_file
-
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnResponseModel, VpnPutModel
 from models.connection import build_connection_model, ConnectionModel

@@ -1,10 +1,10 @@
 import abc
+from copy import deepcopy
 from databases.interface import AbstractDatabase
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
-from models.connection import ConnectionModel, ConnectionType
+from models.connection import ConnectionModel
 from vpn_manager.vpn import VpnServer
-from vpn_manager.peers import PeerList, Peer
 
 
 class InMemoryDataStore(AbstractDatabase):
@@ -47,7 +47,6 @@ class InMemoryDataStore(AbstractDatabase):
         """Return a VPN network by name.  If it doesn't exist, return None."""
         if name in self._vpn_networks:
             stored_vpn = self._vpn_networks[name]
-            peer_list = PeerList(vpn_name=name, db_interface=self)
             vpn = VpnServer(
                 database=self,
                 name=name,
@@ -59,7 +58,6 @@ class InMemoryDataStore(AbstractDatabase):
                 private_key=stored_vpn.wireguard.private_key,
                 listen_port=stored_vpn.wireguard.listen_port,
                 connection_info=stored_vpn.connection_info,
-                peers=peer_list,
             )
             return vpn
         else:
@@ -89,6 +87,8 @@ class InMemoryDataStore(AbstractDatabase):
 
     def add_peer(self, vpn_name: str, peer: PeerDbModel):
         """Add a new peer to the database."""
+        if peer in self._vpn_peers[vpn_name]:
+            raise ValueError("Duplicate peer")
         self._vpn_peers[vpn_name].append(peer)
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
@@ -96,24 +96,25 @@ class InMemoryDataStore(AbstractDatabase):
             if peer in self._vpn_peers[vpn_name]:
                 self._vpn_peers[vpn_name].remove(peer)
 
-    def get_peers(self, vpn_name: str) -> list[Peer]:
+    def get_peers(self, vpn_name: str) -> list[PeerDbModel]:
         """Return a list of peers for a given VPN network."""
-        result = []
         if vpn_name in self._vpn_peers:
-            for stored_peer in self._vpn_peers[vpn_name]:
-                peer = Peer(
-                    peer_id=stored_peer.peer_id,
-                    public_key=stored_peer.public_key,
-                    ip_address=stored_peer.ip_address,
-                    private_key=stored_peer.private_key,
-                    allowed_ips=stored_peer.allowed_ips,
-                    persistent_keepalive=stored_peer.persistent_keepalive,
-                    tags=stored_peer.tags,
-                )
-                result.append(peer)
-        return result
+            return deepcopy(self._vpn_peers[vpn_name])
+        return []
 
-    def get_peer(self, vpn_name: str, peer_ip: str) -> Peer | None:
+    def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[PeerDbModel]:
+        """Return a list of peers for a given VPN network by tag."""
+        matching_tags = []
+        _peers = self.get_peers(vpn_name)
+        if _peers is None:
+            return []
+        else:
+            for peer in _peers:
+                if tag in peer.tags:
+                    matching_tags.append(peer)
+        return matching_tags
+
+    def get_peer(self, vpn_name: str, peer_ip: str) -> PeerDbModel | None:
         """Return a specific peer from the database.  If the peer does not exist, return None."""
         for peer in self.get_peers(vpn_name):
             if peer.ip_address == peer_ip:
@@ -122,15 +123,19 @@ class InMemoryDataStore(AbstractDatabase):
 
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Add a tag to a peer."""
-        peer = self.get_peer(vpn_name, peer_ip)
-        if peer is not None and tag not in peer.tags:
-            peer.tags.append(tag)
+        if vpn_name in self._vpn_peers:
+            for peer in self._vpn_peers[vpn_name]:
+                if peer.ip_address == peer_ip:
+                    if peer is not None and tag not in peer.tags:
+                        peer.tags.append(tag)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete tag from a peer."""
-        peer = self.get_peer(vpn_name, peer_ip)
-        if peer is not None and tag in peer.tags:
-            peer.tags.remove(tag)
+        if vpn_name in self._vpn_peers:
+            for peer in self._vpn_peers[vpn_name]:
+                if peer.ip_address == peer_ip:
+                    if peer is not None and tag in peer.tags:
+                        peer.tags.remove(tag)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""

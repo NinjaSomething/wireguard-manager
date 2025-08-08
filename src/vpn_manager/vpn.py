@@ -2,8 +2,6 @@ from typing import Optional
 import ipaddress
 from models.vpn import WireguardModel, VpnModel
 from models.connection import ConnectionModel
-from vpn_manager.peers import Peer
-from vpn_manager.peers import PeerList
 from databases.interface import AbstractDatabase
 from server_manager import server_manager_factory
 
@@ -19,7 +17,6 @@ class VpnServer:
         public_key: str,
         listen_port: int,
         connection_info: ConnectionModel,
-        peers: PeerList[Peer],
         description: Optional[str] = None,
         private_key: Optional[str] = None,
     ):
@@ -33,7 +30,6 @@ class VpnServer:
         self._private_key = private_key
         self._listen_port = listen_port
         self._connection_info = connection_info
-        self._peers: PeerList[Peer] = peers
 
         # Get a list of all IPs for this subnet
         self._all_ip_addresses = set(ipaddress.ip_network(self.ip_network).hosts())
@@ -99,10 +95,6 @@ class VpnServer:
         self._database.update_connection_info(self.name, connection_info)
 
     @property
-    def peers(self) -> PeerList[Peer]:
-        return self._peers
-
-    @property
     def all_ip_addresses(self) -> list[str]:
         return [str(ip) for ip in self._all_ip_addresses]
 
@@ -126,7 +118,7 @@ class VpnServer:
 
     def calculate_available_ips(self):
         # Get a list of all IPs that are already used by peers
-        used_ips = set([ipaddress.ip_address(peer.ip_address) for peer in self.peers])
+        used_ips = set([ipaddress.ip_address(peer.ip_address) for peer in self._database.get_peers(self.name)])
         used_ips.add(ipaddress.ip_address(self.ip_address))  # Include the servers IP as being used
 
         # Get a list of IPs that are available for use
@@ -147,5 +139,4 @@ class VpnServer:
                 listen_port=self.listen_port,
             ),
             connection_info=self.connection_info,
-            peers=self.peers,
         )
