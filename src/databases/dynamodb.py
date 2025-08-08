@@ -6,7 +6,7 @@ from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionType
 from vpn_manager.vpn import VpnServer
-from models.connection import build_connection_model, ConnectionModel
+from models.connection import build_wireguard_connection_model, ConnectionModel
 from databases.in_mem_db import InMemoryDataStore
 from environment import Environment
 
@@ -64,7 +64,7 @@ class DynamoDb(InMemoryDataStore):
 
         all_vpns = []
         for dynamo_vpn in data:
-            connection_info = build_connection_model(dynamo_vpn["connection_info"])
+            connection_info = build_wireguard_connection_model(dynamo_vpn["connection_info"])
             vpn = VpnModel(
                 name=dynamo_vpn["name"],
                 description=dynamo_vpn["description"],
@@ -126,6 +126,12 @@ class DynamoDb(InMemoryDataStore):
             vpn_dynamo.connection_info["data"]["key"] = new_vpn.connection_info.data.key
             if new_vpn.connection_info.data.key_password is not None:
                 vpn_dynamo.connection_info["data"]["key_password"] = new_vpn.connection_info.data.key_password
+        elif new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSM:
+            # Get the secret value for the AWS aws_access_key_id and aws_secret_access_key
+            vpn_dynamo.connection_info["data"]["aws_access_key_id"] = new_vpn.connection_info.data.aws_access_key_id
+            vpn_dynamo.connection_info["data"][
+                "aws_secret_access_key"
+            ] = new_vpn.connection_info.data.aws_secret_access_key
 
         response = self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
         # TODO: Handle failure response

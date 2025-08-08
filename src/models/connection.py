@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 from enum import Enum
+
 from models.ssh import SshConnectionModel, SshConnectionResponseModel
+from models.ssm import SsmConnectionModel, SsmConnectionResponseModel
 
 """
 This module contains pydantic modules for how the wireguard manager should manage (add/remove peers) from the
@@ -12,6 +14,7 @@ class ConnectionType(str, Enum):
     """This is an enumerations of the supported connection types"""
 
     SSH = "ssh"
+    SSM = "ssm"
 
 
 class ConnectionModel(BaseModel):
@@ -24,7 +27,7 @@ class ConnectionModel(BaseModel):
         description="This is used to determine how the wireguard manager will communicate with the wireguard server.  "
         "This is used to add and remove peers.",
     )
-    data: SshConnectionModel = Field(
+    data: SshConnectionModel | SsmConnectionModel = Field(
         ..., description="These are the connection details for how to connect to the wireguard server. "
     )
 
@@ -39,12 +42,12 @@ class ConnectionResponseModel(BaseModel):
         description="This is used to determine how the wireguard manager will communicate with the wireguard server.  "
         "This is used to add and remove peers.",
     )
-    data: SshConnectionResponseModel = Field(
+    data: SshConnectionResponseModel | SsmConnectionResponseModel = Field(
         ..., description="These are the connection details for how to connect to the wireguard server. "
     )
 
 
-def build_connection_model(connection_info: dict | None) -> ConnectionModel | None:
+def build_wireguard_connection_model(connection_info: dict | None) -> ConnectionModel | None:
     """This will build a ConnectionModel object of the appropriate type"""
     if not connection_info:
         return None
@@ -52,6 +55,8 @@ def build_connection_model(connection_info: dict | None) -> ConnectionModel | No
     match connection_info["type"]:
         case ConnectionType.SSH:
             data = SshConnectionModel(**connection_info["data"])
+        case ConnectionType.SSM:
+            data = SsmConnectionModel(**connection_info["data"])
         case _:
             raise Exception(f"Unknown connection type {connection_info['type']}")
     return ConnectionModel(type=connection_info["type"], data=data)
