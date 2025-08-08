@@ -94,18 +94,7 @@ class PeerList(list):
             super().append(peer)
 
     def append(self, value: Peer):
-        self.db_interface.add_peer(vpn_name=self.vpn_name, peer=value.to_db_model())
         super().append(value)
-
-    def remove(self, value: Peer):
-        self.db_interface.delete_peer(vpn_name=self.vpn_name, peer=value.to_db_model())
-        super().remove(value)
-
-    def clear(self):
-        """Clear the peer list and remove all peers from the database."""
-        for peer in self:
-            self.db_interface.delete_peer(vpn_name=self.vpn_name, peer=peer.to_db_model())
-        super().clear()
 
     def to_model(self) -> list[PeerResponseModel]:
         """Convert the peer list to a list of PeerResponseModel."""

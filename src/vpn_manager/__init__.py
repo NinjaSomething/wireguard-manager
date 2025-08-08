@@ -75,6 +75,12 @@ class VpnManager:
             _vpn.peers.clear()
             self._db_manager.delete_vpn(name)
 
+    def add_peer(self, vpn_name: str, peer: Peer):
+        """This will add the peer to the database"""
+        vpn = self.get_vpn(vpn_name)
+        self._db_manager.add_peer(vpn_name=vpn_name, peer=peer.to_db_model())
+        vpn.peers.append(peer)
+
     def get_peers_by_ip(self, vpn_name: str, ip_address: str) -> Peer | None:
         _vpn = self.get_vpn(vpn_name)
         if _vpn is None:
@@ -156,8 +162,7 @@ class VpnManager:
                     skip_peer = True
 
             if not skip_peer:
-                add_peers.append(import_peer)
-                _vpn.peers.append(import_peer)
+                self.add_peer(vpn_name, import_peer)
         _vpn.calculate_available_ips()
 
         return add_peers
