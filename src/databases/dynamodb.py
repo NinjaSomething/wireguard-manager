@@ -1,5 +1,6 @@
 import boto3
 from typing import Optional
+from copy import deepcopy
 
 from pydantic import BaseModel
 from models.vpn import WireguardModel, VpnModel
@@ -129,13 +130,13 @@ class DynamoDb(InMemoryDataStore):
 
         response = self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
         # TODO: Handle failure response
-        super().add_vpn(new_vpn)
+        super().add_vpn(new_vpn)  # Add the VPN to the in-memory datastore
 
     def delete_vpn(self, name: str):
         """Remove a VPN network from the database."""
         response = self.vpn_table.delete_item(Key={"name": name})
         # TODO: Handle failure response
-        super().delete_vpn(name)
+        super().delete_vpn(name)  # Remove the VPN from the in-memory datastore
 
     def add_peer(self, vpn_name: str, peer: PeerDbModel):
         peer_dynamo = PeerDynamoModel(
@@ -150,38 +151,40 @@ class DynamoDb(InMemoryDataStore):
         )
         response = self.peer_table.put_item(Item=peer_dynamo.dict())
         # TODO: Handle failure response
-        super().add_peer(vpn_name, peer)
+        super().add_peer(vpn_name, peer)  # Add the peer to the in-memory datastore
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
         response = self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
         # TODO: Handle failure response
-        super().delete_peer(vpn_name, peer)
+        super().delete_peer(vpn_name, peer)  # Remove the peer from the in-memory datastore
 
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Add a tag to a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag not in peer.tags:
-            super().add_tag_to_peer(vpn_name, peer_ip, tag)
             response = self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
-                ExpressionAttributeValues={":newTags": peer.tags},
+                ExpressionAttributeValues={":newTags": peer.tags + [tag]},
                 ReturnValues="UPDATED_NEW",
             )
             # TODO: Handle failure response
+            super().add_tag_to_peer(vpn_name, peer_ip, tag)  # Add the tag to the in-memory datastore
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete tag from a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag in peer.tags:
-            super().delete_tag_from_peer(vpn_name, peer_ip, tag)
+            new_tags = deepcopy(peer.tags)
+            new_tags.remove(tag)
             response = self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
-                ExpressionAttributeValues={":newTags": peer.tags},
+                ExpressionAttributeValues={":newTags": new_tags},
                 ReturnValues="UPDATED_NEW",
             )
             # TODO: Handle failure response
+            super().delete_tag_from_peer(vpn_name, peer_ip, tag)  # Remove the tag from the in-memory datastore
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
@@ -194,7 +197,6 @@ class DynamoDb(InMemoryDataStore):
                 if connection_info.data.key_password is not None:
                     connection_info_dict["data"]["key_password"] = connection_info.data.key_password
 
-        super().update_connection_info(vpn_name, connection_info)
         response = self.vpn_table.update_item(
             Key={"name": vpn_name},
             UpdateExpression="set connection_info=:newConnectionInfo",
@@ -202,3 +204,4 @@ class DynamoDb(InMemoryDataStore):
             ReturnValues="UPDATED_NEW",
         )
         # TODO: Handle failure response
+        super().update_connection_info(vpn_name, connection_info)  # Update the in-memory datastore
