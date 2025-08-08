@@ -38,11 +38,10 @@ class DynamoDb(InMemoryDataStore):
     """
     This wraps around the InMemoryDataStore class and uses DynamoDB as the backend.  It will fetch all the Wireguard
     servers and their peers during startup and store it in memory.  Requests for data from the DB will use the in-memory
-    datastore.  Changes made to the DB will first be done to DynamoDB and then to the in-memory datastore.
+    datastore as a cache.  Changes made to the DB will first be done to DynamoDB and then to the in-memory datastore.
     """
 
     def __init__(self, environment: Environment, dynamodb_endpoint_url: str, aws_region: str = "us-west-2"):
-        super().__init__()
         dynamodb = None
         match environment:
             case environment.DEV:
@@ -53,21 +52,9 @@ class DynamoDb(InMemoryDataStore):
                 dynamodb = boto3.resource("dynamodb", region_name=aws_region)
         self.vpn_table = dynamodb.Table(f"wireguard-manager-vpn-servers-{environment.value}")
         self.peer_table = dynamodb.Table(f"wireguard-manager-peers-{environment.value}")
-        self._init_vpn_from_db()
-        self._init_peers_from_db()
+        super().__init__()
 
-    def _init_vpn_from_db(self):
-        """Get existing VPNs from DynamoDb and add them to the in-memory datastore."""
-        all_vpns = self.get_all_vpns()
-        for vpn in all_vpns:
-            self._vpn_networks[vpn.name] = vpn
-            self._vpn_peers[vpn.name] = []
-
-    def _init_peers_from_db(self):
-        """Get existing Peers from DynamoDb and add them to the in-memory datastore."""
-        self._vpn_peers = self.get_all_peers()
-
-    def get_all_vpns(self) -> list[VpnModel]:
+    def _get_all_vpn_from_server(self) -> list[VpnModel]:
         """Get all VPN networks from the database."""
         response = self.vpn_table.scan()
         data = response["Items"]
@@ -94,7 +81,7 @@ class DynamoDb(InMemoryDataStore):
             all_vpns.append(vpn)
         return all_vpns
 
-    def get_all_peers(self) -> dict[str, list[PeerDbModel]]:
+    def _get_all_peers_from_server(self) -> dict[str, list[PeerDbModel]]:
         """
         Get all peers from the database.
         dict key: vpn_name

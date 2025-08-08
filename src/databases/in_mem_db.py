@@ -1,3 +1,4 @@
+import abc
 from databases.interface import AbstractDatabase
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
@@ -10,6 +11,29 @@ class InMemoryDataStore(AbstractDatabase):
     def __init__(self):
         self._vpn_networks: dict[str, VpnModel] = {}
         self._vpn_peers: dict[str, list[PeerDbModel]] = {}
+        self._init_vpn_from_db()
+        self._init_peers_from_db()
+
+    def _init_vpn_from_db(self):
+        """Get existing VPNs from DynamoDb and add them to the in-memory datastore."""
+        all_vpns = self._get_all_vpn_from_server()
+        for vpn in all_vpns:
+            self._vpn_networks[vpn.name] = vpn
+            self._vpn_peers[vpn.name] = []
+
+    def _init_peers_from_db(self):
+        """Get existing Peers from DynamoDb and add them to the in-memory datastore."""
+        self._vpn_peers = self._get_all_peers_from_server()
+
+    @abc.abstractmethod
+    def _get_all_vpn_from_server(self) -> dict[str, VpnServer]:
+        """Fetch all the VPN networks from the database server."""
+        pass
+
+    @abc.abstractmethod
+    def _get_all_peers_from_server(self) -> dict[str, list[PeerDbModel]]:
+        """Fetch all the peers from the database server."""
+        pass
 
     def tables_exist(self, create_table: bool = True) -> bool:
         """Return true if the required tables exist in the database.  If create_table is true, auto create the tables."""
