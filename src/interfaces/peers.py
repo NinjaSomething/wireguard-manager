@@ -101,7 +101,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
             server_manager.add_peer(vpn, new_peer)
         except ConnectionException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
-    vpn.peers.append(new_peer)
+    vpn_manager.add_peer(vpn_name, new_peer)
     vpn.calculate_available_ips()
     return new_peer.to_model()
 
