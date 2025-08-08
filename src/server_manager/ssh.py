@@ -6,12 +6,10 @@ from io import StringIO
 from models.connection import ConnectionModel
 from models.wg_server import WgServerModel
 from models.peers import PeerRequestModel, PeerDbModel
+from models.vpn import VpnModel
 import logging
 from server_manager import ConnectionException, extract_wg_server_config
 from server_manager.interface import AbstractServerManager
-
-if typing.TYPE_CHECKING:
-    from vpn_manager.vpn import VpnServer
 
 
 log = logging.getLogger(__name__)
@@ -69,16 +67,18 @@ class SshConnection(AbstractServerManager):
             result = wg_dump_response
         return result
 
-    def remove_peer(self, vpn: VpnServer, peer: PeerDbModel):
+    def remove_peer(self, vpn: VpnModel, peer: PeerDbModel):
         """Remove a peer from the VPN server"""
-        cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"
+        cmd_to_execute = (
+            f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"
+        )
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssh_response, str):
             raise ConnectionException(f"Failed to remove peer from vpn: {ssh_response}")
 
-    def add_peer(self, vpn: VpnServer, peer: PeerRequestModel):
+    def add_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Add a peer to the VPN server"""
-        cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
+        cmd_to_execute = f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssh_response, str):
             raise ConnectionException(f"Failed to add peer to vpn: {ssh_response}")

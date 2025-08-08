@@ -222,6 +222,26 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
 
+    def test_add_peer_invalid_address_space(self, test_input, mock_vpn_manager):
+        """Try adding peer using an address space that is larger than the VPN server's address space"""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        peer_config = PeerRequestModel(
+            ip_address="10.20.40.4",
+            allowed_ips="10.20.0.0/16",
+            public_key="PEER_PUBLIC_KEY2",
+            private_key=None,
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        # Execute Test
+        response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
     def test_get_all_peers_hide_secrets(self, test_input, mock_vpn_manager):
         """Try getting all peers."""
         # Set up Test

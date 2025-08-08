@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionType
-from vpn_manager.vpn import VpnServer
 from models.connection import build_connection_model, ConnectionModel
 from databases.in_mem_db import InMemoryDataStore
 from environment import Environment
@@ -108,17 +107,17 @@ class DynamoDb(InMemoryDataStore):
             vpn_peers[dynamo_peer["vpn_name"]].append(peer)
         return vpn_peers
 
-    def add_vpn(self, new_vpn: VpnServer):
+    def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
         vpn_dynamo = VpnDynamoModel(
             name=new_vpn.name,
             description=new_vpn.description,
-            wireguard_ip_address=new_vpn.ip_address,
-            wireguard_ip_network=new_vpn.ip_network,
-            wireguard_interface=new_vpn.interface,
-            wireguard_public_key=new_vpn.public_key,
-            wireguard_private_key=new_vpn.private_key,
-            wireguard_listen_port=new_vpn.listen_port,
+            wireguard_ip_address=new_vpn.wireguard.ip_address,
+            wireguard_ip_network=new_vpn.wireguard.ip_network,
+            wireguard_interface=new_vpn.wireguard.interface,
+            wireguard_public_key=new_vpn.wireguard.public_key,
+            wireguard_private_key=new_vpn.wireguard.private_key,
+            wireguard_listen_port=new_vpn.wireguard.listen_port,
             connection_info=new_vpn.connection_info.model_dump() if new_vpn.connection_info else None,
         )
         if new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSH:
@@ -127,13 +126,13 @@ class DynamoDb(InMemoryDataStore):
             if new_vpn.connection_info.data.key_password is not None:
                 vpn_dynamo.connection_info["data"]["key_password"] = new_vpn.connection_info.data.key_password
 
-        response = self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
+        self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
         # TODO: Handle failure response
         super().add_vpn(new_vpn)  # Add the VPN to the in-memory datastore
 
     def delete_vpn(self, name: str):
         """Remove a VPN network from the database."""
-        response = self.vpn_table.delete_item(Key={"name": name})
+        self.vpn_table.delete_item(Key={"name": name})
         # TODO: Handle failure response
         super().delete_vpn(name)  # Remove the VPN from the in-memory datastore
 
@@ -148,12 +147,12 @@ class DynamoDb(InMemoryDataStore):
             allowed_ips=peer.allowed_ips,
             tags=peer.tags,
         )
-        response = self.peer_table.put_item(Item=peer_dynamo.dict())
+        self.peer_table.put_item(Item=peer_dynamo.model_dump())
         # TODO: Handle failure response
         super().add_peer(vpn_name, peer)  # Add the peer to the in-memory datastore
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
-        response = self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
+        self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
         # TODO: Handle failure response
         super().delete_peer(vpn_name, peer)  # Remove the peer from the in-memory datastore
 
@@ -161,7 +160,7 @@ class DynamoDb(InMemoryDataStore):
         """Add a tag to a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag not in peer.tags:
-            response = self.peer_table.update_item(
+            self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
                 ExpressionAttributeValues={":newTags": peer.tags + [tag]},
@@ -175,7 +174,7 @@ class DynamoDb(InMemoryDataStore):
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag in peer.tags:
             peer.tags.remove(tag)
-            response = self.peer_table.update_item(
+            self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
                 ExpressionAttributeValues={":newTags": peer.tags},
@@ -195,7 +194,7 @@ class DynamoDb(InMemoryDataStore):
                 if connection_info.data.key_password is not None:
                     connection_info_dict["data"]["key_password"] = connection_info.data.key_password
 
-        response = self.vpn_table.update_item(
+        self.vpn_table.update_item(
             Key={"name": vpn_name},
             UpdateExpression="set connection_info=:newConnectionInfo",
             ExpressionAttributeValues={":newConnectionInfo": connection_info_dict},

@@ -2,11 +2,12 @@ import codecs
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 import logging
+import ipaddress
 from uuid import uuid4
 from databases.interface import AbstractDatabase
+from models.connection import ConnectionModel
 from models.peers import PeerDbModel, PeerRequestModel
-from vpn_manager.vpn import VpnServer
-from models.vpn import VpnPutModel
+from models.vpn import VpnPutModel, VpnModel
 from server_manager import server_manager_factory
 
 log = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class VpnManager:
             raise ValueError(f"VPN with name {name} already exists.")
 
         for existing_vpn in self.get_all_vpn():
-            if existing_vpn.public_key == vpn_request.wireguard.public_key:
+            if existing_vpn.wireguard.public_key == vpn_request.wireguard.public_key:
                 raise ValueError(
                     f"A Wireguard VPN using the public key {vpn_request.wireguard.public_key} already exists."
                 )
@@ -42,35 +43,73 @@ class VpnManager:
             if isinstance(wg_config_data, str):
                 raise KeyError(f"SSH information for VPN {name} failed: {wg_config_data}")
 
-        _vpn = VpnServer(
-            database=self._db_manager,
-            name=name,
-            description=description,
-            ip_address=vpn_request.wireguard.ip_address,
-            ip_network=vpn_request.wireguard.ip_network,
-            interface=vpn_request.wireguard.interface,
-            public_key=vpn_request.wireguard.public_key,
-            private_key=vpn_request.wireguard.private_key,
-            listen_port=vpn_request.wireguard.listen_port,
-            connection_info=vpn_request.connection_info,
-        )
-        if vpn_request.wireguard.ip_address not in _vpn.all_ip_addresses:
+        _vpn = VpnModel(**vpn_request.model_dump(), name=name, description=description)
+        if vpn_request.wireguard.ip_address not in self.all_ip_addresses(vpn_request.wireguard.ip_network):
             raise ValueError(
                 f"IP address {vpn_request.wireguard.ip_address} is not in the address space "
                 f"{vpn_request.wireguard.ip_network}."
             )
         self._db_manager.add_vpn(_vpn)
 
-    def get_all_vpn(self) -> list[VpnServer]:
+    def get_all_vpn(self) -> list[VpnModel]:
         return [_vpn for _vpn in self._db_manager.get_all_vpn().values()]
 
-    def get_vpn(self, name: str) -> VpnServer | None:
+    def get_vpn(self, name: str) -> VpnModel | None:
         return self._db_manager.get_vpn(name)
 
     def remove_vpn(self, name: str):
         _vpn = self.get_vpn(name)
         if _vpn is not None:
             self._db_manager.delete_vpn(name)
+
+    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
+        # Validate the SSH connection info works
+        if connection_info is not None:
+            _vpn = self.get_vpn(vpn_name)
+            server_manager = server_manager_factory(connection_info.type)
+            wg_config_data = server_manager.dump_interface_config(_vpn.wireguard.interface, connection_info)
+            if isinstance(wg_config_data, str):
+                raise KeyError(f"SSH information for VPN {vpn_name} failed: {wg_config_data}")
+        self._db_manager.update_connection_info(vpn_name, connection_info)
+
+    def all_ip_addresses(self, ip_network: str) -> list[str]:
+        """This will return all the IP addresses in a VPN network."""
+        return [str(ip) for ip in set(ipaddress.ip_network(ip_network).hosts())]
+
+    def available_ips(self, vpn_name: str) -> list[str]:
+        """This will return all the unused IP addresses in a VPN network."""
+        _vpn = self.get_vpn(vpn_name)
+        if _vpn is None:
+            return []
+
+        used_ips = set([ipaddress.ip_address(peer.ip_address) for peer in self._db_manager.get_peers(vpn_name)])
+        used_ips.add(ipaddress.ip_address(_vpn.wireguard.ip_address))  # Include the servers IP as being used
+
+        # Get a list of IPs that are available for use
+        available_ips = list(set(ipaddress.ip_network(_vpn.wireguard.ip_network).hosts()) - used_ips)
+        available_ips.sort()
+        return [str(available_ip) for available_ip in available_ips]
+
+    def get_next_available_ip(self, vpn_name: str) -> str:
+        """Get the next available IP address from the pool."""
+        available_ips = self.available_ips(vpn_name)
+        if not available_ips:
+            raise ValueError("No available IP addresses in the pool.")
+        return available_ips[0]
+
+    def validate_ip_network(self, vpn_name, peer_allowed_ips: str):
+        """Will raise a ValueError if the address space is not valid."""
+        if int(peer_allowed_ips.split("/")[1]) < 16:
+            # Don't allow a peer to use address spaces larger than /16.  Generating that many IPs is not practical and
+            # could crash the service.
+            raise ValueError(f"Address space [{peer_allowed_ips}] is too large. Allowed IPs must be /16 or smaller.")
+        peer_ip_network = set(ipaddress.ip_network(peer_allowed_ips).hosts())
+        _vpn = self.get_vpn(vpn_name)
+        if len(list(peer_ip_network - set(ipaddress.ip_network(_vpn.wireguard.ip_network).hosts()))) > 0:
+            raise ValueError(
+                f"Address space [{peer_allowed_ips}] is larger than the address space of the "
+                f"VPN server [{_vpn.wireguard.ip_network}]."
+            )
 
     def add_peer(self, vpn_name: str, peer: PeerRequestModel):
         """This will add the peer to the database"""
@@ -128,7 +167,7 @@ class VpnManager:
         # This downloads the wireguard server config and extracts the data.
         _vpn = self.get_vpn(vpn_name)
         server_manager = server_manager_factory(_vpn.connection_info.type)
-        wg_config_data = server_manager.dump_interface_config(_vpn.interface, _vpn.connection_info)
+        wg_config_data = server_manager.dump_interface_config(_vpn.wireguard.interface, _vpn.connection_info)
         if isinstance(wg_config_data, str):
             raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
 
@@ -138,7 +177,7 @@ class VpnManager:
                 ip_address=peer.wg_ip_address,
                 public_key=peer.public_key,
                 persistent_keepalive=peer.persistent_keepalive,
-                allowed_ips=_vpn.ip_network,
+                allowed_ips=_vpn.wireguard.ip_network,
                 tags=["imported"],
             )
             # Check if the peer already exists in the VPN
@@ -151,7 +190,6 @@ class VpnManager:
             if not skip_peer:
                 self.add_peer(vpn_name, import_peer)
                 add_peers.append(import_peer)
-        _vpn.calculate_available_ips()
 
         return add_peers
 
