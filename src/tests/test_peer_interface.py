@@ -80,7 +80,7 @@ class TestPeerInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == [vpn]
 
     def test_add_peer_server_not_exist(self, test_input, mock_vpn_manager):
@@ -168,7 +168,7 @@ class TestPeerInterface:
         assert response.status_code == HTTPStatus.OK
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db.get_all_peers()
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
         assert PeerRequestModel(**all_peers[vpn.name][0].model_dump()) == peer_config
 
         # Validate the peer was added to the mock WireGuard server
@@ -456,7 +456,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert actual_peer == expected_peer
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db.get_all_peers()
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
         for db_peer in all_peers[vpn.name]:
             if db_peer.ip_address == expected_peer.ip_address:
                 assert db_peer.public_key == "GENERATED_PUBLIC_KEY"
@@ -513,7 +513,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db.get_all_peers()
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
         assert actual_peer.ip_address in [peer.ip_address for peer in all_peers[vpn.name]]
 
         # Validate the peer was added to the mock WireGuard server
@@ -572,7 +572,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert actual_peer == expected_peer
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db.get_all_peers()
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
         for db_peer in all_peers[vpn.name]:
             if db_peer.ip_address == expected_peer.ip_address:
                 assert expected_tag in db_peer.tags
@@ -644,7 +644,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert actual_peer == expected_peer
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db.get_all_peers()
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
         for db_peer in all_peers[vpn.name]:
             if db_peer.ip_address == expected_peer.ip_address:
                 assert expected_tag not in db_peer.tags
@@ -817,7 +817,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
             # Validate the peer was added to DynamoDB
             found_db_peer = False
-            all_peers = mock_dynamo_db.get_all_peers()
+            all_peers = mock_dynamo_db._get_all_peers_from_server()
             for db_peer in all_peers[vpn.name]:
                 if db_peer.ip_address == expected_peer.ip_address:
                     found_db_peer = True
@@ -899,7 +899,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             assert get_response.status_code == HTTPStatus.NOT_FOUND
 
             # Validate the peer was deleted from DynamoDB
-            all_peers = mock_dynamo_db.get_all_peers()
+            all_peers = mock_dynamo_db._get_all_peers_from_server()
             if len(all_peers) > 0:
                 assert [db_peer for db_peer in all_peers[vpn.name] if db_peer.ip_address == delete_ip] == []
 
@@ -929,5 +929,5 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == []
