@@ -4,7 +4,7 @@ import typing
 
 if typing.TYPE_CHECKING:
     from models.peers import PeerDbModel
-    from vpn_manager.vpn import VpnServer
+    from models.vpn import VpnModel
     from models.connection import ConnectionModel
 
 
@@ -15,17 +15,17 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_all_vpn(self) -> dict[str, VpnServer]:
+    def get_all_vpn(self) -> dict[str, VpnModel]:
         """Return a copy of all the VPN networks."""
         pass
 
     @abc.abstractmethod
-    def get_vpn(self, name) -> VpnServer:
+    def get_vpn(self, name) -> VpnModel | None:
         """Return a VPN network by name.  If it doesn't exist, return None."""
         pass
 
     @abc.abstractmethod
-    def add_vpn(self, new_vpn: VpnServer):
+    def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
         pass
 

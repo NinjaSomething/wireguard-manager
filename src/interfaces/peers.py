@@ -46,7 +46,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
     vpn = vpn_manager.get_vpn(vpn_name)
     # Assign an IP address if not provided
     if peer.ip_address is None:
-        peer.ip_address = vpn.get_next_available_ip()
+        peer.ip_address = vpn_manager.get_next_available_ip(vpn_name)
 
     if peer.public_key is None:
         # Generate the key-pair
@@ -70,7 +70,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
             )
 
     # Verify the IP address is available in the VPN address space
-    if peer.ip_address not in vpn.available_ips:
+    if peer.ip_address not in vpn_manager.available_ips(vpn_name):
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"IP address {peer.ip_address} is not available in VPN {vpn_name}",
@@ -78,7 +78,7 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
 
     # Verify the allowed_ips are within the bounds of the VPN server address space
     try:
-        vpn.validate_ip_network(peer.allowed_ips)
+        vpn_manager.validate_ip_network(vpn_name, peer.allowed_ips)
     except ValueError as ex:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
@@ -92,7 +92,6 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
         except ConnectionException as ex:
             raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
     vpn_manager.add_peer(vpn_name, peer)
-    vpn.calculate_available_ips()
     return PeerResponseModel(**peer.model_dump())
 
 
@@ -112,7 +111,6 @@ def delete_peer(vpn_name: str, ip_address: str) -> Response:
             except ConnectionException as ex:
                 raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
         vpn_manager.delete_peer(vpn_name, ip_address)
-    vpn.calculate_available_ips()
     return Response(status_code=HTTPStatus.OK)
 
 
@@ -140,9 +138,9 @@ Address = {peer.ip_address}
 PrivateKey = {peer.private_key if peer.private_key else "[INSERT_PRIVATE_KEY]"}
 
 [Peer]
-PublicKey = {vpn.public_key}
+PublicKey = {vpn.wireguard.public_key}
 AllowedIPs = {peer.allowed_ips}
-Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info else "[INSERT_VPN_IP]"}:{vpn.listen_port}
+Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info else "[INSERT_VPN_IP]"}:{vpn.wireguard.listen_port}
 PersistentKeepalive = {peer.persistent_keepalive}"""
     return response
 

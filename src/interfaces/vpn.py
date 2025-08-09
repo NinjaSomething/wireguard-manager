@@ -28,7 +28,7 @@ def validate_vpn_exists(name: str, vpn_manager) -> None:
 def get_all_vpns(hide_secrets: bool = True) -> list[VpnResponseModel]:
     """Get all the VPN servers managed by this service."""
     vpn_manager = vpn_router.vpn_manager
-    vpn_models = [VpnResponseModel(**vpn.to_model().model_dump()) for vpn in vpn_manager.get_all_vpn()]
+    vpn_models = [VpnResponseModel(**vpn.model_dump()) for vpn in vpn_manager.get_all_vpn()]
     for vpn_model in vpn_models:
         vpn_model.opaque = hide_secrets
     return vpn_models
@@ -66,11 +66,11 @@ def update_ssh(name: str, connection_info: ConnectionModel) -> list[PeerResponse
     # TODO: Add peers to the VPN that exist in the manager but not on the wg server
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
-    vpn = vpn_manager.get_vpn(name)
 
     # Import peers on the wireguard server automatically
     try:
-        vpn.connection_info = build_connection_model(connection_info.model_dump())
+        connection_info = build_connection_model(connection_info.model_dump())
+        vpn_manager.update_connection_info(name, connection_info)
         added_peers = vpn_manager.import_peers(name)
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
@@ -88,8 +88,7 @@ def remove_ssh(name: str) -> Response:
     """
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
-    vpn = vpn_manager.get_vpn(name)
-    vpn.connection_info = None
+    vpn_manager.update_connection_info(name, None)
     return Response(status_code=HTTPStatus.OK)
 
 
@@ -109,6 +108,6 @@ def get_vpn(name: str, hide_secrets: bool = True) -> VpnResponseModel:
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    vpn_model = VpnResponseModel(**vpn.to_model().model_dump())
+    vpn_model = VpnResponseModel(**vpn.model_dump())
     vpn_model.opaque = hide_secrets
     return vpn_model

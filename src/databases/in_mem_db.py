@@ -1,10 +1,9 @@
 import abc
 from copy import deepcopy
 from databases.interface import AbstractDatabase
-from models.vpn import WireguardModel, VpnModel
+from models.vpn import VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionModel
-from vpn_manager.vpn import VpnServer
 
 
 class InMemoryDataStore(AbstractDatabase):
@@ -26,7 +25,7 @@ class InMemoryDataStore(AbstractDatabase):
         self._vpn_peers = self._get_all_peers_from_server()
 
     @abc.abstractmethod
-    def _get_all_vpn_from_server(self) -> dict[str, VpnServer]:
+    def _get_all_vpn_from_server(self) -> dict[str, VpnModel]:
         """Fetch all the VPN networks from the database server."""
         pass
 
@@ -39,45 +38,17 @@ class InMemoryDataStore(AbstractDatabase):
         """Return true if the required tables exist in the database.  If create_table is true, auto create the tables."""
         pass
 
-    def get_all_vpn(self) -> dict[str, VpnServer]:
+    def get_all_vpn(self) -> dict[str, VpnModel]:
         """Return a copy of all the VPN networks."""
         return {name: self.get_vpn(name) for name in self._vpn_networks.keys()}
 
-    def get_vpn(self, name) -> VpnServer | None:
+    def get_vpn(self, name) -> VpnModel | None:
         """Return a VPN network by name.  If it doesn't exist, return None."""
-        if name in self._vpn_networks:
-            stored_vpn = self._vpn_networks[name]
-            vpn = VpnServer(
-                database=self,
-                name=name,
-                description=stored_vpn.description,
-                ip_address=stored_vpn.wireguard.ip_address,
-                ip_network=stored_vpn.wireguard.ip_network,
-                interface=stored_vpn.wireguard.interface,
-                public_key=stored_vpn.wireguard.public_key,
-                private_key=stored_vpn.wireguard.private_key,
-                listen_port=stored_vpn.wireguard.listen_port,
-                connection_info=stored_vpn.connection_info,
-            )
-            return vpn
-        else:
-            return None
+        return self._vpn_networks.get(name)
 
-    def add_vpn(self, new_vpn: VpnServer):
+    def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
-        self._vpn_networks[new_vpn.name] = VpnModel(
-            name=new_vpn.name,
-            description=new_vpn.description,
-            wireguard=WireguardModel(
-                ip_address=new_vpn.ip_address,
-                ip_network=new_vpn.ip_network,
-                interface=new_vpn.interface,
-                public_key=new_vpn.public_key,
-                private_key=new_vpn.private_key,
-                listen_port=new_vpn.listen_port,
-            ),
-            connection_info=new_vpn.connection_info,
-        )
+        self._vpn_networks[new_vpn.name] = new_vpn
         self._vpn_peers[new_vpn.name] = []
 
     def delete_vpn(self, name: str):
