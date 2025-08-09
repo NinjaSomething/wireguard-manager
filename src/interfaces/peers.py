@@ -4,8 +4,8 @@ from http import HTTPStatus
 from models.peers import PeerResponseModel, PeerRequestModel
 import logging
 from interfaces.custom_router import WgAPIRouter
-from server_manager import server_manager_factory, ConnectionException
-from vpn_manager import VpnUpdateException
+from server_manager import ConnectionException
+from vpn_manager import VpnUpdateException, BadRequestException, ConflictException
 from interfaces.vpn import validate_vpn_exists
 
 
@@ -89,55 +89,15 @@ def add_peer(vpn_name: str, peer: PeerRequestModel) -> PeerResponseModel:
     """Add a new peer to a VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
-    vpn = vpn_manager.get_vpn(vpn_name)
-    # Assign an IP address if not provided
-    if peer.ip_address is None:
-        peer.ip_address = vpn_manager.get_next_available_ip(vpn_name)
-
-    if peer.public_key is None:
-        # Generate the key-pair
-        peer.private_key, peer.public_key = vpn_manager.generate_wireguard_keys()
-
-    vpn_peers = vpn_manager.get_all_peers(vpn_name)
-
-    for existing_peer in vpn_peers:
-        # Verify the IP address is not already in use on this VPN
-        if existing_peer.ip_address == peer.ip_address:
-            raise HTTPException(
-                status_code=HTTPStatus.CONFLICT,
-                detail=f"Peer with IP {peer.ip_address} already exists in VPN {vpn_name}",
-            )
-
-        # Verify the Public Key is not already in use on this VPN
-        if existing_peer.public_key == peer.public_key:
-            raise HTTPException(
-                status_code=HTTPStatus.CONFLICT,
-                detail=f"Peer {peer.ip_address} is already using that public key on VPN {vpn_name}",
-            )
-
-    # Verify the IP address is available in the VPN address space
-    if peer.ip_address not in vpn_manager.available_ips(vpn_name):
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"IP address {peer.ip_address} is not available in VPN {vpn_name}",
-        )
-
-    # Verify the allowed_ips are within the bounds of the VPN server address space
     try:
-        vpn_manager.validate_ip_network(vpn_name, peer.allowed_ips)
-    except ValueError as ex:
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Allowed IPs Error: {ex}",
-        )
+        vpn_manager.add_peer(vpn_name, peer)
+    except ConnectionException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
+    except BadRequestException as ex:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except ConflictException as ex:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(ex))
 
-    if vpn.connection_info is not None:
-        try:
-            server_manager = server_manager_factory(vpn.connection_info.type)
-            server_manager.add_peer(vpn, peer)
-        except ConnectionException as ex:
-            raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
-    vpn_manager.add_peer(vpn_name, peer)
     return PeerResponseModel(**peer.model_dump())
 
 
@@ -158,26 +118,15 @@ def delete_peer(vpn_name: str, ip_address: str) -> Response:
 )
 def generate_new_wireguard_keys(vpn_name: str, ip_address: str) -> PeerResponseModel:
     """Generate new WireGuard keys for a peer."""
-    server_manager = None
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
-    vpn = vpn_manager.get_vpn(vpn_name)
-    peer = vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
 
-    if vpn.connection_info is not None:
-        try:
-            server_manager = server_manager_factory(vpn.connection_info.type)
-            server_manager.remove_peer(vpn, peer)
-        except ConnectionException as ex:
-            raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
+    try:
+        updated_peer = vpn_manager.generate_new_peer_keys(vpn_name, ip_address)
+    except ConnectionException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
 
-    vpn_manager.generate_new_peer_keys(vpn_name, peer)
-    if vpn.connection_info is not None:
-        try:
-            server_manager.add_peer(vpn, peer)
-        except ConnectionException as ex:
-            raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
-    peer_response = PeerResponseModel(**peer.model_dump())
+    peer_response = PeerResponseModel(**updated_peer.model_dump())
     peer_response.opaque = False  # Hide secrets in the response
     return peer_response
 
