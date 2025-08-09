@@ -10,7 +10,10 @@ from models.peers import PeerDbModel, PeerRequestModel
 from models.vpn import VpnPutModel, VpnModel
 from server_manager import server_manager_factory
 
+
 log = logging.getLogger(__name__)
+
+"""This module is an interface between the API and the database"""
 
 
 class VpnUpdateException(Exception):
@@ -51,6 +54,10 @@ class VpnManager:
             )
         self._db_manager.add_vpn(_vpn)
 
+        #  Keep the manager aligned with the wireguard server.  Import existing peers.
+        if _vpn.connection_info:
+            self.import_peers(name)
+
     def get_all_vpn(self) -> list[VpnModel]:
         return [_vpn for _vpn in self._db_manager.get_all_vpn().values()]
 
@@ -62,7 +69,7 @@ class VpnManager:
         if _vpn is not None:
             self._db_manager.delete_vpn(name)
 
-    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
+    def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel | None):
         # Validate the SSH connection info works
         if connection_info is not None:
             _vpn = self.get_vpn(vpn_name)
@@ -131,8 +138,16 @@ class VpnManager:
         return self._db_manager.get_peers_by_tag(vpn_name, tag)
 
     def delete_peer(self, vpn_name: str, ip_address: str):
-        peer = self.get_peers_by_ip(vpn_name, ip_address)
-        if peer:
+        """
+        This will remove a peer from the wireguard server and the database.  A ConnectionException will be raised if
+        this fails to add the peer to the wireguard server.
+        """
+        peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
+        if peer is not None:
+            vpn = self.get_vpn(vpn_name)
+            if vpn.connection_info is not None:
+                server_manager = server_manager_factory(vpn.connection_info.type)
+                server_manager.remove_peer(vpn, peer)
             self._db_manager.delete_peer(vpn_name, peer)
 
     @staticmethod
