@@ -20,9 +20,7 @@ class WireguardModel(BaseModel):
         examples=["10.0.0.1/24"],
     )
     interface: str = Field(..., description="The wireguard interface name", examples=["wg0"])
-    public_key: str = Field(
-        ..., description="The wireguard public key", examples=["knXNHhRRgFQVBSTD60c81oqbFvslnpzAx5Y0/rrJuBY="]
-    )
+    public_key: str = Field(..., description="The wireguard public key", examples=["knXNHhRRg60c81oqbAx5Y0/rrJuBY="])
     private_key: str = Field(
         ..., description="The wireguard private key", examples=["8NJdfUxW1deRmrGLW+yVFxH0xCKmfOqxyQCw9O5J4mI="]
     )
