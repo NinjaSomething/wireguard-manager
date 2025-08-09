@@ -25,7 +25,7 @@ class InMemoryDataStore(AbstractDatabase):
         self._vpn_peers = self._get_all_peers_from_server()
 
     @abc.abstractmethod
-    def _get_all_vpn_from_server(self) -> dict[str, VpnModel]:
+    def _get_all_vpn_from_server(self) -> list[VpnModel]:
         """Fetch all the VPN networks from the database server."""
         pass
 

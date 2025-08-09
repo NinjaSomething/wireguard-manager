@@ -72,7 +72,8 @@ class VpnManager:
                 raise KeyError(f"SSH information for VPN {vpn_name} failed: {wg_config_data}")
         self._db_manager.update_connection_info(vpn_name, connection_info)
 
-    def all_ip_addresses(self, ip_network: str) -> list[str]:
+    @staticmethod
+    def all_ip_addresses(ip_network: str) -> list[str]:
         """This will return all the IP addresses in a VPN network."""
         return [str(ip) for ip in set(ipaddress.ip_network(ip_network).hosts())]
 
@@ -176,6 +177,7 @@ class VpnManager:
             import_peer = PeerRequestModel(
                 ip_address=peer.wg_ip_address,
                 public_key=peer.public_key,
+                private_key=None,
                 persistent_keepalive=peer.persistent_keepalive,
                 allowed_ips=_vpn.wireguard.ip_network,
                 tags=["imported"],
