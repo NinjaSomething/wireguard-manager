@@ -22,6 +22,18 @@ class VpnUpdateException(Exception):
     pass
 
 
+class ConflictException(Exception):
+    """Custom exception for conflicts, such as duplicate entries."""
+
+    pass
+
+
+class BadRequestException(Exception):
+    """Custom exception for bad requests."""
+
+    pass
+
+
 class VpnManager:
     def __init__(self, db_manager: AbstractDatabase):
         self._db_manager = db_manager
@@ -114,13 +126,50 @@ class VpnManager:
         peer_ip_network = set(ipaddress.ip_network(peer_allowed_ips).hosts())
         _vpn = self.get_vpn(vpn_name)
         if len(list(peer_ip_network - set(ipaddress.ip_network(_vpn.wireguard.ip_network).hosts()))) > 0:
-            raise ValueError(
+            raise BadRequestException(
                 f"Address space [{peer_allowed_ips}] is larger than the address space of the "
                 f"VPN server [{_vpn.wireguard.ip_network}]."
             )
 
     def add_peer(self, vpn_name: str, peer: PeerRequestModel):
-        """This will add the peer to the database"""
+        """
+        This will add the peer to the database.
+        :param vpn_name: The name of the VPN to add the peer to.
+        :param peer: The PeerRequestModel containing the peer details.
+        :raises ConnectionException: If there is an error connecting to the VPN server
+        :raises ConflictException: If the IP address or public key is already being used
+        :raises BadRequestException: If the peer's allowed IPs is a larger address space than the one on the VPN server
+        :raises BadRequestException: If the peers IP address is outside the VPN address space
+        """
+        vpn = self.get_vpn(vpn_name)
+        # Assign an IP address if not provided
+        if peer.ip_address is None:
+            peer.ip_address = self.get_next_available_ip(vpn_name)
+
+        if peer.public_key is None:
+            # Generate the key-pair
+            peer.private_key, peer.public_key = self.generate_wireguard_keys()
+
+        for existing_peer in self.get_all_peers(vpn_name):
+            # Verify the IP address is not already in use on this VPN
+            if existing_peer.ip_address == peer.ip_address:
+                raise ConflictException(f"Peer with IP {peer.ip_address} already exists in VPN {vpn_name}")
+
+            # Verify the Public Key is not already in use on this VPN
+            if existing_peer.public_key == peer.public_key:
+                raise ConflictException(f"Peer {peer.ip_address} is already using that public key on VPN {vpn_name}")
+
+        # Verify the IP address is available in the VPN address space
+        if peer.ip_address not in self.available_ips(vpn_name):
+            raise BadRequestException(f"IP address {peer.ip_address} is not available in VPN {vpn_name}")
+
+        # Verify the allowed_ips are within the bounds of the VPN server address space
+        self.validate_ip_network(vpn_name, peer.allowed_ips)
+
+        if vpn.connection_info is not None:
+            server_manager = server_manager_factory(vpn.connection_info.type)
+            server_manager.add_peer(vpn, peer)
+
         self._db_manager.add_peer(vpn_name=vpn_name, peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())))
 
     def get_all_peers(self, vpn_name: str) -> list[PeerDbModel]:
@@ -173,21 +222,36 @@ class VpnManager:
 
         return private_key_str, public_key_str
 
-    def generate_new_peer_keys(self, vpn_name: str, peer: PeerDbModel):
+    def generate_new_peer_keys(self, vpn_name: str, ip_address: str):
+        """
+        This will generate new keys for the peer and update the database.  If the connection_info is set, it will
+        also remove the old peer from the wireguard server and add the peer with the new keys.
+        :param vpn_name: The name of the VPN the peer is in.
+        :param ip_address: The IP address of the peer to update.
+        """
+        vpn = self.get_vpn(vpn_name)
+        peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
+        if vpn.connection_info is not None:
+            server_manager = server_manager_factory(vpn.connection_info.type)
+            server_manager.remove_peer(vpn, peer)
+
         self._db_manager.delete_peer(vpn_name, peer)
         peer.private_key, peer.public_key = self.generate_wireguard_keys()
         self._db_manager.add_peer(vpn_name, peer)
+
+        if vpn.connection_info is not None:
+            server_manager.add_peer(vpn, peer)
         return peer
 
     def import_peers(self, vpn_name: str) -> list[PeerRequestModel]:
-        # This downloads the wireguard server config and extracts the data.
+        """This downloads the wireguard server peers and imports any that don't already exist."""
         _vpn = self.get_vpn(vpn_name)
         server_manager = server_manager_factory(_vpn.connection_info.type)
         wg_config_data = server_manager.dump_interface_config(_vpn.wireguard.interface, _vpn.connection_info)
         if isinstance(wg_config_data, str):
             raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
 
-        add_peers = []
+        added_peers = []
         for peer in wg_config_data.peers:
             import_peer = PeerRequestModel(
                 ip_address=peer.wg_ip_address,
@@ -206,9 +270,9 @@ class VpnManager:
 
             if not skip_peer:
                 self.add_peer(vpn_name, import_peer)
-                add_peers.append(import_peer)
+                added_peers.append(import_peer)
 
-        return add_peers
+        return added_peers
 
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Add a tag to an existing peer"""
