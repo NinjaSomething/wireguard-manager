@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 
+from vpn_manager import VpnManager
+
 
 class WgAPIRouter(APIRouter):
     """
@@ -9,15 +11,15 @@ class WgAPIRouter(APIRouter):
 
     def __init__(self):
         super().__init__()
-        self._vpn_manager = None
+        self._vpn_manager: VpnManager = None
 
     @property
-    def vpn_manager(self):
+    def vpn_manager(self) -> VpnManager:
         if self._vpn_manager is None:
             raise Exception("vpn_manager has not been configured in APIRouter, set it before use")
         else:
             return self._vpn_manager
 
     @vpn_manager.setter
-    def vpn_manager(self, value):
+    def vpn_manager(self, value: VpnManager):
         self._vpn_manager = value
