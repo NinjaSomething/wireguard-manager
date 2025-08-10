@@ -131,7 +131,7 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db.get_all_vpns()
+            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
             assert all_vpns == []
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
@@ -179,7 +179,7 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db.get_all_vpns()
+            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
             assert all_vpns == []
 
     def test_add_server_invalid_ip_network(
@@ -202,7 +202,7 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.BAD_REQUEST
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == []
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
@@ -242,7 +242,7 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == [vpn]
 
     def test_add_server_existing_name(
@@ -266,7 +266,7 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == [test_input]
 
     def test_add_server_existing_public_key(
@@ -289,7 +289,7 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == [test_input]
 
     def test_get_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, test_input):
@@ -370,7 +370,7 @@ class TestVpnInterface:
             response = client.get(f"/vpn/{vpn.name}?hide_secrets=false")
             updated_vpn = VpnModel(**response.json())
             assert updated_vpn.connection_info is None
-            all_vpns = mock_dynamo_db.get_all_vpns()
+            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
             assert all_vpns == [updated_vpn]
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
@@ -429,7 +429,7 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db.get_all_vpns()
+            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
             assert all_vpns == [expected_vpn]
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
@@ -475,7 +475,7 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db.get_all_vpns()
+            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
             assert all_vpns == [expected_vpn]
 
             # Break down test
@@ -525,7 +525,7 @@ class TestVpnInterface:
             response = client.get(f"/vpn/{vpn.name}?hide_secrets=false")
             updated_vpn = VpnModel(**response.json())
             assert updated_vpn.connection_info == vpn.connection_info
-            all_vpns = mock_dynamo_db.get_all_vpns()
+            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
             assert all_vpns == [test_input]
 
     def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
@@ -548,5 +548,5 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == 200
-        all_vpns = mock_dynamo_db.get_all_vpns()
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
         assert all_vpns == []

@@ -41,7 +41,7 @@ class VpnManager:
                 vpn_request.wireguard.interface, vpn_request.connection_info
             )
             if isinstance(wg_config_data, str):
-                raise KeyError(f"Connection information for VPN {name} failed: {wg_config_data}")
+                raise KeyError(f"SSH information for VPN {name} failed: {wg_config_data}")
 
         _vpn = VpnServer(
             database=self._db_manager,

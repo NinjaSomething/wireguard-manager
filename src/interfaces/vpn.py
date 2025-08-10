@@ -2,8 +2,6 @@ from fastapi import Response, HTTPException
 from http import HTTPStatus
 from typing import Optional
 
-from setuptools.windows_support import hide_file
-
 from interfaces.custom_router import WgAPIRouter
 from models.vpn import VpnResponseModel, VpnPutModel
 from models.connection import build_wireguard_connection_model, ConnectionModel
@@ -30,32 +28,30 @@ def validate_vpn_exists(name: str, vpn_manager) -> None:
 def get_all_vpns(hide_secrets: bool = True) -> list[VpnResponseModel]:
     """Get all the VPN servers managed by this service."""
     vpn_manager = vpn_router.vpn_manager
-    vpn_models = [VpnResponseModel(**vpn.to_model().model_dump()) for vpn in vpn_manager.get_all_vpn()]
-    for vpn_model in vpn_models:
+    vpn_models = []
+    for vpn in vpn_manager.get_all_vpn():
+        vpn_model = VpnResponseModel(**vpn.model_dump())
         vpn_model.opaque = hide_secrets
+        vpn_models.append(vpn_model)
     return vpn_models
 
 
 @vpn_router.put("/vpn/{name}", tags=["vpn"])
 def add_vpn(name: str, vpn: VpnPutModel, description: Optional[str] = "") -> Response:
     """
-    Add an existing VPN to the Wireguard Manager.  When this is done, clients can be added to the VPN using this service.
+    Add an VPN server to the Wireguard Manager.  When this is done, clients can be added to the VPN using this service.
     """
     vpn_manager = vpn_router.vpn_manager
     try:
         vpn_manager.add_vpn(name, description, vpn)
-        if vpn.connection_info:
-            #  Keep the manager aligned with the wireguard server.  Import existing peers.
-            try:
-                vpn_manager.import_peers(name)
-            except VpnUpdateException as ex:
-                raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     except ValueError as ex:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=f"Failed to add VPN {name}: {ex}")
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except Exception as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return Response(status_code=HTTPStatus.OK)
 
 
@@ -68,11 +64,11 @@ def update_connection(name: str, connection_info: ConnectionModel) -> list[PeerR
     # TODO: Add peers to the VPN that exist in the manager but not on the wg server
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
-    vpn = vpn_manager.get_vpn(name)
 
     # Import peers on the wireguard server automatically
     try:
-        vpn.connection_info = build_wireguard_connection_model(connection_info.model_dump())
+        connection_info = build_wireguard_connection_model(connection_info.model_dump())
+        vpn_manager.update_connection_info(name, connection_info)
         added_peers = vpn_manager.import_peers(name)
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
@@ -86,12 +82,12 @@ def update_connection(name: str, connection_info: ConnectionModel) -> list[PeerR
 @vpn_router.delete("/vpn/{name}/connection-info", tags=["vpn"])
 def remove_connection(name: str) -> Response:
     """
-    Delete the connection information for a VPN server.  This service will no longer manage the clients on the VPN server.
+    Delete the connection information for a VPN server.  This service will no longer manage the clients on the
+    VPN server.
     """
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
-    vpn = vpn_manager.get_vpn(name)
-    vpn.connection_info = None
+    vpn_manager.update_connection_info(name, None)
     return Response(status_code=HTTPStatus.OK)
 
 
@@ -99,7 +95,8 @@ def remove_connection(name: str) -> Response:
 def delete_vpn(name: str) -> Response:
     """
     This will remove a WireGuard VPN server from the WireGuard manager.  No changes will be made to the wireguard
-    network itself.  This service will no longer manage the VPN.
+    VPN server itself.  This will no longer manage the VPN, so peers added to the WireGuard manager will not be added
+    to the wireguard VPN.
     """
     vpn_manager = vpn_router.vpn_manager
     vpn_manager.remove_vpn(name)
@@ -108,9 +105,10 @@ def delete_vpn(name: str) -> Response:
 
 @vpn_router.get("/vpn/{name}", tags=["vpn"], response_model=VpnResponseModel)
 def get_vpn(name: str, hide_secrets: bool = True) -> VpnResponseModel:
+    """This is used to view the configuration of a specific VPN server."""
     vpn_manager = vpn_router.vpn_manager
     validate_vpn_exists(name, vpn_manager)
     vpn = vpn_manager.get_vpn(name)
-    vpn_model = VpnResponseModel(**vpn.to_model().model_dump())
+    vpn_model = VpnResponseModel(**vpn.model_dump())
     vpn_model.opaque = hide_secrets
     return vpn_model

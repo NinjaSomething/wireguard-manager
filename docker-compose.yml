@@ -6,7 +6,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     ports:
-      - 5000:5000
+      - "5000:5000"
     environment:
       - UVICORN_HOST=wg-manager
       - UVICORN_PORT=5000
@@ -22,7 +22,7 @@ services:
     image: amazon/dynamodb-local:latest
     container_name: dynamodb-local
     ports:
-      - 8000:8000
+      - "8000:8000"
     user: root
     volumes:
       - dynamodb-data:/home/dynamodblocal/data

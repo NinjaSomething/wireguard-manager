@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "serverless": "^4.14.3",
+    "osls": "v3.52.0",
     "serverless-dynamodb": "^0.2.56"
   }
 }

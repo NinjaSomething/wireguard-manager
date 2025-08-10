@@ -4,8 +4,7 @@ import typing
 
 if typing.TYPE_CHECKING:
     from models.peers import PeerDbModel
-    from vpn_manager.vpn import VpnServer
-    from vpn_manager.peers import Peer
+    from models.vpn import VpnModel
     from models.connection import ConnectionModel
 
 
@@ -16,17 +15,17 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_all_vpn(self) -> dict[str, VpnServer]:
+    def get_all_vpn(self) -> dict[str, VpnModel]:
         """Return a copy of all the VPN networks."""
         pass
 
     @abc.abstractmethod
-    def get_vpn(self, name) -> VpnServer:
+    def get_vpn(self, name) -> VpnModel | None:
         """Return a VPN network by name.  If it doesn't exist, return None."""
         pass
 
     @abc.abstractmethod
-    def add_vpn(self, new_vpn: VpnServer):
+    def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
         pass
 
@@ -46,12 +45,17 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_peers(self, vpn_name: str) -> list[Peer]:
+    def get_peers(self, vpn_name: str) -> list[PeerDbModel]:
         """Return a list of peers for a given VPN network."""
         pass
 
     @abc.abstractmethod
-    def get_peer(self, vpn_name: str, peer_ip: str) -> Peer:
+    def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[PeerDbModel]:
+        """Return a list of peers for a given VPN network by tag."""
+        pass
+
+    @abc.abstractmethod
+    def get_peer(self, vpn_name: str, peer_ip: str) -> PeerDbModel:
         """Return a specific peer from the database.  If the peer does not exist, return None."""
         pass
 
