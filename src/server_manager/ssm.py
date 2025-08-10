@@ -65,7 +65,7 @@ class SsmConnection(AbstractServerManager):
                 if status in ("Success", "Failed", "Cancelled", "TimedOut"):
                     break
             except ClientError as e:
-                if not e.response['Error']['Code'] == 'InvocationDoesNotExist':
+                if not e.response["Error"]["Code"] == "InvocationDoesNotExist":
                     return f"SSM get_command_invocation failed: {e}"
             time.sleep(1)
 
