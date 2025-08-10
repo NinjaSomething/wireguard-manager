@@ -61,12 +61,12 @@ class SsmConnection(AbstractServerManager):
                 inv = ssm.get_command_invocation(
                     CommandId=cmd_id, InstanceId=connection_info.data.target_id, PluginName="aws:RunShellScript"
                 )
+                status = inv["Status"]
+                if status in ("Success", "Failed", "Cancelled", "TimedOut"):
+                    break
             except ClientError as e:
-                return f"SSM get_command_invocation failed: {e}"
-
-            status = inv["Status"]
-            if status in ("Success", "Failed", "Cancelled", "TimedOut"):
-                break
+                if not e.response['Error']['Code'] == 'InvocationDoesNotExist':
+                    return f"SSM get_command_invocation failed: {e}"
             time.sleep(1)
 
         # return output or error
