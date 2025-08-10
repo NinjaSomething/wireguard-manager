@@ -1,9 +1,9 @@
 from __future__ import annotations
-import typing
 from typing import Optional
 from models.connection import ConnectionModel
+from models.peers import PeerRequestModel
+from models.vpn import VpnModel
 from models.wg_server import WgServerModel
-from vpn_manager.peers import Peer
 import logging
 from server_manager import ConnectionException, extract_wg_server_config
 from server_manager.interface import AbstractServerManager
@@ -12,10 +12,7 @@ from typing import List, Union
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
-
-if typing.TYPE_CHECKING:
-    from vpn_manager.vpn import VpnServer
+from botocore.exceptions import ClientError
 
 
 log = logging.getLogger(__name__)
@@ -87,16 +84,18 @@ class SsmConnection(AbstractServerManager):
             result = wg_dump_response
         return result
 
-    def remove_peer(self, vpn: VpnServer, peer: Peer):
+    def remove_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Remove a peer from the VPN server"""
-        cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"
+        cmd_to_execute = (
+            f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"
+        )
         ssm_response = SsmConnection._remote_ssm_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssm_response, str):
             raise ConnectionException(f"Failed to remove peer from vpn: {ssm_response}")
 
-    def add_peer(self, vpn: VpnServer, peer: Peer):
+    def add_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Add a peer to the VPN server"""
-        cmd_to_execute = f"sudo wg set {vpn.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
+        cmd_to_execute = f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
         ssm_response = SsmConnection._remote_ssm_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssm_response, str):
             raise ConnectionException(f"Failed to add peer to vpn: {ssm_response}")
