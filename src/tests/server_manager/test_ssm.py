@@ -3,11 +3,11 @@ import pytest_mock
 import pytest
 from unittest.mock import MagicMock
 
+from models.peers import PeerRequestModel
 from models.ssm import SsmConnectionModel
 from server_manager.ssm import SsmConnection, ConnectionException
 from models.connection import ConnectionModel, ConnectionType
 from models.wg_server import WgServerModel
-from vpn_manager.peers import Peer
 from botocore.exceptions import ClientError
 
 
@@ -71,7 +71,7 @@ def test_remove_peer_success(mocker, connection_info):
     vpn = MagicMock()
     vpn.interface = "wg0"
     vpn.connection_info = connection_info
-    peer = MagicMock(spec=Peer)
+    peer = MagicMock(spec=PeerRequestModel)
     peer.public_key = "pubkey"
     ssm.remove_peer(vpn, peer)  # Should not raise
 
@@ -83,7 +83,7 @@ def test_remove_peer_failure(mocker, connection_info):
     vpn = MagicMock()
     vpn.interface = "wg0"
     vpn.connection_info = connection_info
-    peer = MagicMock(spec=Peer)
+    peer = MagicMock(spec=PeerRequestModel)
     peer.public_key = "pubkey"
     with pytest.raises(ConnectionException):
         ssm.remove_peer(vpn, peer)
@@ -96,7 +96,7 @@ def test_add_peer_success(mocker, connection_info):
     vpn = MagicMock()
     vpn.interface = "wg0"
     vpn.connection_info = connection_info
-    peer = MagicMock(spec=Peer)
+    peer = MagicMock(spec=PeerRequestModel)
     peer.public_key = "pubkey"
     peer.persistent_keepalive = 25
     peer.ip_address = "10.0.0.2/32"
@@ -110,7 +110,7 @@ def test_add_peer_failure(mocker, connection_info):
     vpn = MagicMock()
     vpn.interface = "wg0"
     vpn.connection_info = connection_info
-    peer = MagicMock(spec=Peer)
+    peer = MagicMock(spec=PeerRequestModel)
     peer.public_key = "pubkey"
     peer.persistent_keepalive = 25
     peer.ip_address = "10.0.0.2/32"

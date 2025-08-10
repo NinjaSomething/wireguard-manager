@@ -169,7 +169,7 @@ class TestVpnInterface:
                 mock_ssm_client_instance.get_command_invocation.side_effect = (
                     mock_ssm_client_instance.get_command_invocation.side_effect
                 ) = ClientError(
-                    error_response={"Error": {"Code": "InvocationDoesNotExist", "Message": "SSM connection failed"}},
+                    error_response={"Error": {"Code": "BLAHHH", "Message": "SSM connection failed"}},
                     operation_name="GetCommandInvocation",
                 )
 
@@ -464,7 +464,7 @@ class TestVpnInterface:
                 mock_ssm_client_instance.get_command_invocation.side_effect = (
                     mock_ssm_client_instance.get_command_invocation.side_effect
                 ) = ClientError(
-                    error_response={"Error": {"Code": "InvocationDoesNotExist", "Message": "SSM connection failed"}},
+                    error_response={"Error": {"Code": "jlk;asjfalkf", "Message": "SSM connection failed"}},
                     operation_name="GetCommandInvocation",
                 )
 
