@@ -1,12 +1,15 @@
 import urllib.parse
 from copy import deepcopy
 from http import HTTPStatus
+
+from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import pytest
 
 from app import app, vpn_router
 from models.ssh import SshConnectionModel
+from models.ssm import SsmConnectionModel
 from models.vpn import VpnPutModel, WireguardModel, VpnModel
 from models.connection import ConnectionModel, ConnectionType
 from models.wg_server import WgServerModel
@@ -47,6 +50,24 @@ test_parameters = [
             data=SshConnectionModel(ip_address="10.0.0.1", username="test_user", key="SSH_KEY", key_password=None),
         ),
     ),
+    VpnModel(
+        name="test-vpn",
+        description="Test VPN Server",
+        wireguard=WireguardModel(
+            ip_address="10.20.40.1",
+            ip_network="10.20.40.0/24",
+            interface="wg0",
+            public_key="PUBLIC_KEY",
+            private_key="PRIVATE_KEY",
+            listen_port=12345,
+        ),
+        connection_info=ConnectionModel(
+            type=ConnectionType.SSM,
+            data=SsmConnectionModel(
+                target_id="i-xxxxxxxxxxxxxxxxx", aws_access_key_id="abc", aws_secret_access_key="def"
+            ),
+        ),
+    ),
 ]
 
 
@@ -72,10 +93,13 @@ class TestVpnInterface:
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
     def test_add_server_invalid_wg_interface(
         self,
+        mock_ssm_client,
         mock_ssh_client,
-        mock_exec_command,
+        mock_ssh_command,
+        mock_ssm_command,
         mock_vpn_table,
         mock_peer_table,
         mock_vpn_manager,
@@ -94,7 +118,12 @@ class TestVpnInterface:
 
             vpn_router.vpn_manager = mock_vpn_manager
             if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
-                mock_ssh_client().exec_command = mock_exec_command.exec_command
+                mock_ssh_client().exec_command = mock_ssh_command.command
+
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+                mock_ssm_client_instance = mock_ssm_client()
+                mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+                mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
 
             # Execute Test
             url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -107,10 +136,13 @@ class TestVpnInterface:
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
     def test_add_server_ssh_connection_failure(
         self,
+        mock_ssm_client,
         mock_ssh_client,
-        mock_exec_command,
+        mock_ssh_command,
+        mock_ssm_command,
         mock_vpn_table,
         mock_peer_table,
         mock_vpn_manager,
@@ -130,7 +162,16 @@ class TestVpnInterface:
             if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
                 ssh_client = mock_ssh_client()
                 ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
-                ssh_client.exec_command = mock_exec_command.exec_command
+                ssh_client.exec_command = mock_ssh_command.command
+            elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+                mock_ssm_client_instance = mock_ssm_client()
+                mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+                mock_ssm_client_instance.get_command_invocation.side_effect = (
+                    mock_ssm_client_instance.get_command_invocation.side_effect
+                ) = ClientError(
+                    error_response={"Error": {"Code": "BLAHHH", "Message": "SSM connection failed"}},
+                    operation_name="GetCommandInvocation",
+                )
 
             # Execute Test
             url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -166,10 +207,13 @@ class TestVpnInterface:
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
     def test_add_server_successfully(
         self,
+        mock_ssm_client,
         mock_ssh_client,
-        mock_exec_command,
+        mock_ssh_command,
+        mock_ssm_command,
         mock_vpn_table,
         mock_peer_table,
         mock_vpn_manager,
@@ -185,7 +229,12 @@ class TestVpnInterface:
         )
         vpn_router.vpn_manager = mock_vpn_manager
         if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
-            mock_ssh_client().exec_command = mock_exec_command.exec_command
+            mock_ssh_client().exec_command = mock_ssh_command.command
+
+        elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+            mock_ssm_client_instance = mock_ssm_client()
+            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
 
         # Execute Test
         url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
@@ -261,9 +310,13 @@ class TestVpnInterface:
         expected_value = deepcopy(vpn)
         expected_value.wireguard.private_key = "**********"
         if vpn.connection_info is not None:
-            expected_value.connection_info.data.key = "**********"
-            if expected_value.connection_info.data.key_password is not None:
-                expected_value.connection_info.data.key_password = "**********"
+            if vpn.connection_info.type == ConnectionType.SSH:
+                expected_value.connection_info.data.key = "**********"
+                if expected_value.connection_info.data.key_password is not None:
+                    expected_value.connection_info.data.key_password = "**********"
+            elif vpn.connection_info.type == ConnectionType.SSM:
+                expected_value.connection_info.data.aws_access_key_id = "**********"
+                expected_value.connection_info.data.aws_secret_access_key = "**********"
 
         # Execute Test
         response = client.get(f"/vpn/{vpn.name}")
@@ -288,9 +341,13 @@ class TestVpnInterface:
         expected_value = deepcopy(vpn)
         expected_value.wireguard.private_key = "**********"
         if vpn.connection_info is not None:
-            expected_value.connection_info.data.key = "**********"
-            if expected_value.connection_info.data.key_password is not None:
-                expected_value.connection_info.data.key_password = "**********"
+            if vpn.connection_info.type == ConnectionType.SSH:
+                expected_value.connection_info.data.key = "**********"
+                if expected_value.connection_info.data.key_password is not None:
+                    expected_value.connection_info.data.key_password = "**********"
+            elif vpn.connection_info.type == ConnectionType.SSM:
+                expected_value.connection_info.data.aws_access_key_id = "**********"
+                expected_value.connection_info.data.aws_secret_access_key = "**********"
 
         # Execute Test
         response = client.get(f"/vpn")
@@ -318,10 +375,13 @@ class TestVpnInterface:
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
     def test_add_connection_invalid_wg_interface(
         self,
+        mock_ssm_client,
         mock_ssh_client,
-        mock_exec_command,
+        mock_ssh_command,
+        mock_ssm_command,
         mock_vpn_table,
         mock_peer_table,
         mock_vpn_manager,
@@ -333,15 +393,34 @@ class TestVpnInterface:
         if test_input.connection_info is not None:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
-            mock_exec_command.server = WgServerModel(
-                interface="wg1", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"
-            )
+
+            if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
+                mock_ssh_command.server = WgServerModel(
+                    interface="wg1",
+                    public_key="PUBLIC_KEY1",
+                    private_key="PRIVATE_KEY1",
+                    listen_port=40023,
+                    fw_mark="off",
+                )
+            elif test_input.connection_info and test_input.connection_info.type == ConnectionType.SSM:
+                mock_ssm_command.server = WgServerModel(
+                    interface="wg1",
+                    public_key="PUBLIC_KEY1",
+                    private_key="PRIVATE_KEY1",
+                    listen_port=40023,
+                    fw_mark="off",
+                )
 
             vpn_router.vpn_manager = mock_vpn_manager
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 ssh_client = mock_ssh_client()
                 ssh_client.connect.side_effect = None
-                ssh_client.exec_command = mock_exec_command.exec_command
+                ssh_client.exec_command = mock_ssh_command.command
+
+            elif test_input.connection_info and test_input.connection_info.type == ConnectionType.SSM:
+                mock_ssm_client_instance = mock_ssm_client()
+                mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+                mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
 
             # Execute Test
             response = client.put(
@@ -355,10 +434,13 @@ class TestVpnInterface:
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
     def test_add_connection_ssh_connection_failure(
         self,
+        mock_ssm_client,
         mock_ssh_client,
-        mock_exec_command,
+        mock_ssh_command,
+        mock_ssm_command,
         mock_vpn_table,
         mock_peer_table,
         mock_vpn_manager,
@@ -374,7 +456,17 @@ class TestVpnInterface:
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 ssh_client = mock_ssh_client()
                 ssh_client.connect.side_effect = Exception("SSH connection failed")  # Simulate SSH connection failure
-                ssh_client.exec_command = mock_exec_command.exec_command
+                ssh_client.exec_command = mock_ssh_command.command
+
+            elif test_input.connection_info and test_input.connection_info.type == ConnectionType.SSM:
+                mock_ssm_client_instance = mock_ssm_client()
+                mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+                mock_ssm_client_instance.get_command_invocation.side_effect = (
+                    mock_ssm_client_instance.get_command_invocation.side_effect
+                ) = ClientError(
+                    error_response={"Error": {"Code": "jlk;asjfalkf", "Message": "SSM connection failed"}},
+                    operation_name="GetCommandInvocation",
+                )
 
             # Execute Test
             response = client.put(
@@ -392,10 +484,13 @@ class TestVpnInterface:
 
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
     def test_add_connection(
         self,
+        mock_ssm_client,
         mock_ssh_client,
-        mock_exec_command,
+        mock_ssh_command,
+        mock_ssm_command,
         mock_vpn_table,
         mock_peer_table,
         mock_vpn_manager,
@@ -406,11 +501,17 @@ class TestVpnInterface:
         # Set up Test - Get all VPN servers but don't hide secrets
         vpn = test_input
         vpn_router.vpn_manager = mock_vpn_manager
+
         if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
             ssh_client = mock_ssh_client()
-            ssh_client.exec_command = mock_exec_command.exec_command
+            ssh_client.exec_command = mock_ssh_command.command
 
-        mock_exec_command.server = WgServerModel(
+        elif test_input.connection_info and test_input.connection_info.type == ConnectionType.SSM:
+            mock_ssm_client_instance = mock_ssm_client()
+            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
+
+        mock_ssh_command.server = WgServerModel(
             interface="wg0", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"
         )
 

@@ -5,9 +5,10 @@ import yaml
 from moto import mock_aws
 from environment import Environment
 from databases.dynamodb import DynamoDb
+from tests.client.mock_ssh_client import MockSshCommand
+from tests.client.mock_ssm_client import MockSsmCommand
 from vpn_manager import VpnManager
 from models.wg_server import WgServerModel
-from tests.mock_ssh_client import MockExecCommand
 
 
 # Session-scoped fixture to load the serverless configuration for the infrastructure.
@@ -59,8 +60,8 @@ def mock_vpn_manager(mock_dynamo_db):
     yield vpn_manager
 
 
-@pytest.fixture(scope="class")
-def mock_exec_command():
+@pytest.fixture
+def mock_ssh_command():
     """
     This fixture mocks the SSHClient.exec_command method for testing purposes.  This simulates the SSH commands to the
     server.  You can use this to add/remove peers, or dump the WireGuard configuration in the expected format.
@@ -68,5 +69,18 @@ def mock_exec_command():
     new_server = WgServerModel(
         interface="wg0", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"
     )
-    mock_exec_command = MockExecCommand(server=new_server, peers=[])
-    yield mock_exec_command
+    mock_ssh_command = MockSshCommand(server=new_server, peers=[])
+    yield mock_ssh_command
+
+
+@pytest.fixture
+def mock_ssm_command():
+    """
+    This fixture mocks the SSM cmd execution for testing purposes. It simulates the SSM commands to the server.
+    You can use this to add/remove peers, or dump the WireGuard configuration in the expected format.
+    """
+    new_server = WgServerModel(
+        interface="wg0", public_key="PUBLIC_KEY1", private_key="PRIVATE_KEY1", listen_port=40023, fw_mark="off"
+    )
+    mock_ssm_command = MockSsmCommand(server=new_server, peers=[])
+    yield mock_ssm_command
