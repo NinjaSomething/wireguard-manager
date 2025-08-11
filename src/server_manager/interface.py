@@ -4,8 +4,8 @@ from typing import Union, Optional
 import typing
 
 if typing.TYPE_CHECKING:
-    from vpn_manager.vpn import VpnServer
-    from vpn_manager.peers import Peer
+    from models.vpn import VpnModel
+    from models.peers import PeerRequestModel, PeerDbModel
     from models.connection import ConnectionModel
     from models.wg_server import WgServerModel
 
@@ -21,11 +21,11 @@ class AbstractServerManager(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def remove_peer(self, vpn: VpnServer, peer: Peer):
+    def remove_peer(self, vpn: VpnModel, peer: PeerDbModel):
         """Remove a peer from the VPN server"""
         pass
 
     @abc.abstractmethod
-    def add_peer(self, vpn: VpnServer, peer: Peer):
+    def add_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Add a peer to the VPN server"""
         pass

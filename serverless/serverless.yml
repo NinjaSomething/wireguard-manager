@@ -1,5 +1,5 @@
 service: wireguard-manager
-frameworkVersion: '4'
+frameworkVersion: '3'
 provider:
   name: aws
   stage: ${opt:stage, 'stg'}
@@ -37,7 +37,7 @@ resources: # CloudFormation template syntax
     WireguardManagerKsmKey:
       Type: AWS::KMS::Key
       Properties:
-        Description: Wireguard Manager KSM Key
+        Description: 'Wireguard Manager KSM Key'
         Enabled: true
         EnableKeyRotation: false
         KeySpec: SYMMETRIC_DEFAULT
