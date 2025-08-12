@@ -7,6 +7,7 @@ from pydantic import SecretStr
 import datetime
 
 from app import app, vpn_router
+from models.peer_history import PeerHistoryResponseModel
 from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
 from models.vpn import VpnPutModel, WireguardModel, VpnModel
@@ -975,87 +976,6 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         # Validate Results
         assert response.status_code == HTTPStatus.OK
 
-    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
-    @patch("server_manager.ssh.paramiko.SSHClient")
-    @patch("server_manager.ssm.boto3.client")
-    def test_delete_peer(
-        self,
-        mock_ssm_client,
-        mock_ssh_client,
-        test_input,
-        mock_ssh_command,
-        mock_ssm_command,
-        mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
-    ):
-        """Delete a peer."""
-        vpn = test_input
-        peer_router.vpn_manager = mock_vpn_manager
-        delete_ips = ["10.20.40.2", "10.20.40.3"]
-
-        mock_ssh_command.server = WgServerModel(
-            interface=vpn.wireguard.interface,
-            public_key=vpn.wireguard.public_key,
-            private_key=vpn.wireguard.private_key,
-            listen_port=vpn.wireguard.listen_port,
-            fw_mark="off",
-        )
-
-        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
-            ssh_client = mock_ssh_client()
-            ssh_client.exec_command = mock_ssh_command.command
-
-        elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
-            mock_ssm_client_instance = mock_ssm_client()
-            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
-            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
-
-        for delete_ip in delete_ips:
-            # Execute Test
-            response = client.delete(f"/vpn/{vpn.name}/peer/{delete_ip}")
-
-            # Validate Results
-            assert response.status_code == HTTPStatus.OK
-            get_response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}")
-            assert get_response.status_code == HTTPStatus.NOT_FOUND
-
-            # Validate the peer was deleted from DynamoDB
-            all_peers = mock_dynamo_db._get_all_peers_from_server()
-            if len(all_peers) > 0:
-                assert [db_peer for db_peer in all_peers[vpn.name] if db_peer.ip_address == delete_ip] == []
-
-            # Validate the peer was removed from the mock WireGuard server
-            if vpn.connection_info is not None:
-                for wg_peer in mock_ssh_command.peers:
-                    if wg_peer.wg_ip_address == delete_ip:
-                        assert wg_peer.wg_ip_address != delete_ip
-
-    def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
-        """Test deleting a VPN server"""
-        # Set up Test
-        vpn = test_input
-        vpn_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test - Delete the VPN server
-        response = client.delete(f"/vpn/{vpn.name}")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.OK
-        response = client.get(f"/vpn/{vpn.name}")
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-        # ---------------------------------------------------
-        # Execute Test - Verify this is idempotent
-        response = client.delete(f"/vpn/{vpn.name}")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
-        assert all_vpns == []
-
     def test_peer_history_invalid_time(
         self,
         test_input,
@@ -1175,3 +1095,122 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert all(tag in d["tags"] for d in data)
         # Assert the entries are in descending order by timestamp
         assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+
+    def test_remove_tag_history(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Remove a tag from a peer. Assert that the tag is removed from the peer's history."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        test_tag = "tag1"
+        test_ip_address = "10.20.40.2"
+
+        # Execute Test
+        client.delete(f"/vpn/{vpn.name}/peer/{test_ip_address}/tag/{test_tag}")
+
+        # Validate Results
+        response = client.get(f"/vpn/{vpn.name}/peer/{test_ip_address}/history")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert test_tag not in PeerHistoryResponseModel(**data[0]).tags
+
+    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
+    @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
+    def test_delete_peer(
+        self,
+        mock_ssm_client,
+        mock_ssh_client,
+        test_input,
+        mock_ssh_command,
+        mock_ssm_command,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_peer_history_table,
+        mock_dynamo_db,
+    ):
+        """Delete a peer."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        delete_ips = ["10.20.40.2", "10.20.40.3"]
+
+        mock_ssh_command.server = WgServerModel(
+            interface=vpn.wireguard.interface,
+            public_key=vpn.wireguard.public_key,
+            private_key=vpn.wireguard.private_key,
+            listen_port=vpn.wireguard.listen_port,
+            fw_mark="off",
+        )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_ssh_command.command
+
+        elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+            mock_ssm_client_instance = mock_ssm_client()
+            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
+
+        for delete_ip in delete_ips:
+            # Execute Test
+            response = client.delete(f"/vpn/{vpn.name}/peer/{delete_ip}")
+
+            # Validate Results
+            assert response.status_code == HTTPStatus.OK
+            get_response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}")
+            assert get_response.status_code == HTTPStatus.NOT_FOUND
+
+            # Validate the peer was deleted from DynamoDB
+            all_peers = mock_dynamo_db._get_all_peers_from_server()
+            if len(all_peers) > 0:
+                assert [db_peer for db_peer in all_peers[vpn.name] if db_peer.ip_address == delete_ip] == []
+
+            # Validate the peer was removed from the mock WireGuard server
+            if vpn.connection_info is not None:
+                for wg_peer in mock_ssh_command.peers:
+                    if wg_peer.wg_ip_address == delete_ip:
+                        assert wg_peer.wg_ip_address != delete_ip
+
+    def test_peer_history_no_exist(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Test peer history was removed after deletion"""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        delete_ips = ["10.20.40.2", "10.20.40.3"]
+
+        for delete_ip in delete_ips:
+            # Execute Test - Get history of deleted peer
+            response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}/history")
+            assert response.status_code == 200
+            data = PeerHistoryResponseModel(**response.json()[0])
+
+            # Validate Results
+            assert data.ip_address == delete_ip
+            assert data.allowed_ips == ""
+            assert data.public_key == ""
+            assert data.private_key == None
+            assert data.persistent_keepalive == 0
+
+    def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
+        """Test deleting a VPN server"""
+        # Set up Test
+        vpn = test_input
+        vpn_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test - Delete the VPN server
+        response = client.delete(f"/vpn/{vpn.name}")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.OK
+        response = client.get(f"/vpn/{vpn.name}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+        # ---------------------------------------------------
+        # Execute Test - Verify this is idempotent
+        response = client.delete(f"/vpn/{vpn.name}")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.OK
+        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        assert all_vpns == []

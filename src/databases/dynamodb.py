@@ -1,5 +1,6 @@
 import logging
 import time
+from copy import deepcopy
 from itertools import groupby
 from uuid import uuid4
 
@@ -187,10 +188,19 @@ class DynamoDb(InMemoryDataStore):
         # TODO: Handle failure response
         super().delete_peer(vpn_name, peer)  # Remove the peer from the in-memory datastore
 
+        # Prevent overwriting original object, in case it's reused later
+        temp_peer = deepcopy(peer)
+        temp_peer.allowed_ips = ""
+        temp_peer.public_key = ""
+        temp_peer.private_key = None
+        temp_peer.persistent_keepalive = 0
+        self.write_peer_history(vpn_name, temp_peer)
+
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Add a tag to a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag not in peer.tags:
+            peer.tags.append(tag)
             self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
@@ -200,7 +210,6 @@ class DynamoDb(InMemoryDataStore):
             # TODO: Handle failure response
             super().add_tag_to_peer(vpn_name, peer_ip, tag)  # Add the tag to the in-memory datastore
             # Write the peer history
-            peer.tags.append(tag)  # Update the peer object in memory
             self.write_peer_history(vpn_name, peer)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
@@ -396,6 +405,6 @@ class DynamoDb(InMemoryDataStore):
                 timestamp=timestamp,
                 vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
                 vpn_name_tag=f"{vpn_name}#",
-                tag=None,
+                tag="",
             )
             self.write_peer_to_history(peer_history)
