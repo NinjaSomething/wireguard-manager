@@ -2,7 +2,6 @@ from datetime import datetime
 
 from fastapi import Response, HTTPException, Path
 from fastapi.responses import PlainTextResponse
-from uuid import uuid4
 from http import HTTPStatus
 
 from models.peer_history import PeerHistoryResponseModel

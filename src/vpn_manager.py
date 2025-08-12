@@ -281,3 +281,9 @@ class VpnManager:
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete a tag from an existing peer"""
         self._db_manager.delete_tag_from_peer(vpn_name, peer_ip, tag)
+
+    def get_tag_history_endpoint(self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None):
+        return self._db_manager.get_tag_history_endpoint(vpn_name, tag, start_time, end_time)
+
+    def get_peer_history_endpoint(self, vpn_name: str, ip_address: str, start_time: str = None, end_time: str = None):
+        return self._db_manager.get_peer_history_endpoint(vpn_name, ip_address, start_time, end_time)

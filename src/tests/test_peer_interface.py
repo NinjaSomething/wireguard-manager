@@ -1059,7 +1059,6 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     def test_peer_history_invalid_time(
         self,
         test_input,
-        mock_exec_command,
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,

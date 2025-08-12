@@ -1,7 +1,7 @@
 from itertools import count
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import boto3
 import yaml
 from moto import mock_aws

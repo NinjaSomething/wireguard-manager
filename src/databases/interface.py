@@ -78,12 +78,12 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_tag_history_endpoint(
-        self, vpn_name: str, tag: str, start_time: Optional[str] = None, end_time: Optional[str] = None
+        self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None
     ) -> list[PeerHistoryResponseModel]:
         pass
 
     @abc.abstractmethod
     def get_peer_history_endpoint(
-        self, vpn_name: str, ip_address: str, start_time: Optional[str] = None, end_time: Optional[str] = None
+        self, vpn_name: str, ip_address: str, start_time: str = None, end_time: str = None
     ) -> list[PeerHistoryResponseModel]:
         pass
