@@ -200,6 +200,7 @@ class DynamoDb(InMemoryDataStore):
             # TODO: Handle failure response
             super().add_tag_to_peer(vpn_name, peer_ip, tag)  # Add the tag to the in-memory datastore
             # Write the peer history
+            peer.tags.append(tag)  # Update the peer object in memory
             self.write_peer_history(vpn_name, peer)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):

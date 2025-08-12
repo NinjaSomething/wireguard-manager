@@ -242,6 +242,7 @@ def get_peer_history_ip_address(
     ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     start_time: datetime = None,
     end_time: datetime = None,
+    hide_secrets: bool = True,
 ) -> list[PeerHistoryResponseModel]:
     """Get the history of a peer."""
     vpn_manager = peer_router.vpn_manager
@@ -260,7 +261,12 @@ def get_peer_history_ip_address(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"No peer history found with IP address {ip_address} in VPN {vpn_name}",
         )
-    return [PeerHistoryResponseModel(**history.dict()) for history in reversed(peer_history)]
+
+    peer_history_responses = []
+    for peer_history in [PeerHistoryResponseModel(**history.dict()) for history in reversed(peer_history)]:
+        peer_history.opaque = hide_secrets
+        peer_history_responses.append(peer_history)
+    return peer_history_responses
 
 
 @peer_router.get(
@@ -275,6 +281,7 @@ def get_tag_history_tag(
     ),
     start_time: datetime = None,
     end_time: datetime = None,
+    hide_secrets: bool = True,
 ) -> list[PeerHistoryResponseModel]:
     """Get the history of a peer by tag."""
     vpn_manager = peer_router.vpn_manager
@@ -293,4 +300,9 @@ def get_tag_history_tag(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"No tag_history found with tag {tag} in VPN {vpn_name}",
         )
-    return [PeerHistoryResponseModel(**history.dict()) for history in reversed(tag_history)]
+
+    peer_history_responses = []
+    for peer_history in [PeerHistoryResponseModel(**history.dict()) for history in reversed(tag_history)]:
+        peer_history.opaque = hide_secrets
+        peer_history_responses.append(peer_history)
+    return peer_history_responses
