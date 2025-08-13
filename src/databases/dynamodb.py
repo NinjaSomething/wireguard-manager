@@ -40,7 +40,7 @@ class DynamoDb(InMemoryDataStore):
     datastore as a cache.  Changes made to the DB will first be done to DynamoDB and then to the in-memory datastore.
     """
 
-    def __init__(self, environment: str, dynamodb_endpoint_url: str, aws_region: str = "us-west-2"):
+    def __init__(self, environment: str, dynamodb_endpoint_url: str | None, aws_region: str = "us-west-2"):
         if dynamodb_endpoint_url is not None:
             dynamodb = boto3.resource("dynamodb", region_name=aws_region, endpoint_url=dynamodb_endpoint_url)
         else:
