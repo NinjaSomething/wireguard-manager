@@ -40,17 +40,13 @@ class DynamoDb(InMemoryDataStore):
     datastore as a cache.  Changes made to the DB will first be done to DynamoDB and then to the in-memory datastore.
     """
 
-    def __init__(self, environment: Environment, dynamodb_endpoint_url: str, aws_region: str = "us-west-2"):
-        dynamodb = None
-        match environment:
-            case environment.DEV:
-                dynamodb = boto3.resource("dynamodb", region_name=aws_region, endpoint_url=dynamodb_endpoint_url)
-            case environment.STAGING:
-                dynamodb = boto3.resource("dynamodb", region_name=aws_region)
-            case environment.PRODUCTION:
-                dynamodb = boto3.resource("dynamodb", region_name=aws_region)
-        self.vpn_table = dynamodb.Table(f"wireguard-manager-vpn-servers-{environment.value}")
-        self.peer_table = dynamodb.Table(f"wireguard-manager-peers-{environment.value}")
+    def __init__(self, environment: str, dynamodb_endpoint_url: str, aws_region: str = "us-west-2"):
+        if dynamodb_endpoint_url is not None:
+            dynamodb = boto3.resource("dynamodb", region_name=aws_region, endpoint_url=dynamodb_endpoint_url)
+        else:
+            dynamodb = boto3.resource("dynamodb", region_name=aws_region)
+        self.vpn_table = dynamodb.Table(f"wireguard-manager-vpn-servers-{environment}")
+        self.peer_table = dynamodb.Table(f"wireguard-manager-peers-{environment}")
         super().__init__()
 
     def _get_all_vpn_from_server(self) -> list[VpnModel]:
