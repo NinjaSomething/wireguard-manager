@@ -3,7 +3,6 @@ from unittest.mock import patch, MagicMock
 import boto3
 import yaml
 from moto import mock_aws
-from environment import Environment
 from databases.dynamodb import DynamoDb
 from tests.client.mock_ssh_client import MockSshCommand
 from tests.client.mock_ssm_client import MockSsmCommand
@@ -26,7 +25,7 @@ def mock_vpn_table(serverless_configuration):
     with mock_aws():
         table_config = serverless_configuration["WireguardManagerVpnServersTable"]["Properties"]
         # override table name
-        table_config["TableName"] = f"wireguard-manager-vpn-servers-{Environment.STAGING.value}"
+        table_config["TableName"] = f"wireguard-manager-vpn-servers-test"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         vpn_table = conn.create_table(**table_config)
         yield vpn_table
@@ -37,7 +36,7 @@ def mock_peer_table(serverless_configuration):
     with mock_aws():
         table_config = serverless_configuration["WireguardManagerPeersTable"]["Properties"]
         # override table name
-        table_config["TableName"] = f"wireguard-manager-peers-{Environment.STAGING.value}"
+        table_config["TableName"] = f"wireguard-manager-peers-test"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         peer_table = conn.create_table(**table_config)
         yield peer_table
@@ -47,8 +46,8 @@ def mock_peer_table(serverless_configuration):
 def mock_dynamo_db():
     with mock_aws():
         dynamo_db = DynamoDb(
-            environment=Environment.STAGING,
-            dynamodb_endpoint_url="test-endpoint",
+            environment="test",
+            dynamodb_endpoint_url=None,
             aws_region="us-west-2",
         )
     yield dynamo_db
