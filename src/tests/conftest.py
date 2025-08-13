@@ -8,7 +8,6 @@ from tests.client.mock_ssh_client import MockSshCommand
 from tests.client.mock_ssm_client import MockSsmCommand
 from vpn_manager import VpnManager
 from models.wg_server import WgServerModel
-from cfn_tools import load_yaml, dump_yaml
 
 
 # Session-scoped fixture to load the serverless configuration for the infrastructure.
