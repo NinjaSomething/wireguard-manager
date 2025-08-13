@@ -7,7 +7,6 @@ from models.peers import PeerDbModel
 from models.connection import ConnectionType
 from models.connection import build_wireguard_connection_model, ConnectionModel
 from databases.in_mem_db import InMemoryDataStore
-from environment import Environment
 
 
 class VpnDynamoModel(BaseModel):
