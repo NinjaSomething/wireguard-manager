@@ -8,7 +8,6 @@ from fastapi import FastAPI, Response
 from http import HTTPStatus
 from interfaces.vpn import vpn_router
 from interfaces.peers import peer_router
-from environment import Environment
 from databases.dynamodb import DynamoDb
 from vpn_manager import VpnManager
 
