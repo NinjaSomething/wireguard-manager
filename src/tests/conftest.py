@@ -13,10 +13,21 @@ from models.wg_server import WgServerModel
 # Session-scoped fixture to load the serverless configuration for the infrastructure.
 # This fixture is used by other fixtures to mock AWS resources, allowing us to
 # thoroughly test the integration between our infrastructure and code.
+class V2Loader(yaml.SafeLoader):
+    """This will allow us to ignore the !Ref tags used by cloudformation but are not valid YAML."""
+
+    def ignore_unknown(self, node):
+        print("Ignoring unknown YAML node:", node)
+        return None
+
+
+V2Loader.add_constructor("!Ref", V2Loader.ignore_unknown)
+
+
 @pytest.fixture(scope="session")
 def serverless_configuration():
     with open("serverless/serverless.yml", "r") as f:
-        config = yaml.safe_load(f)
+        config = yaml.load(f, Loader=V2Loader)
     return config["resources"]["Resources"]
 
 
