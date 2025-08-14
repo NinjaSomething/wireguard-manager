@@ -120,8 +120,7 @@ ENV/
 ~*.xlsx
 
 node_modules/
-serverless-v4/.serverless/
-serverless-v3/.serverless/
+serverless/.serverless/
 
 package-lock.json
 junit/

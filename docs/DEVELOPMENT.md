@@ -33,7 +33,7 @@ Next you will deploy the DynamoDB tables using the Serverless framework.  This w
 local DynamoDB instance.
 
 ```bash
-serverless dynamodb start --stage dev
+serverless dynamodb start --stage local-dev
 ```
 
 You can check to see if the tables have been created using the AWS CLI
