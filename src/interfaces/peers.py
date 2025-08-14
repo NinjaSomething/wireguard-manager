@@ -233,7 +233,7 @@ def delete_tag_from_peer(
 
 
 @peer_router.get(
-    "/vpn/{vpn_name}/peer/{ip_address}/history", tags=["peer-history"], response_model=list[PeerHistoryResponseModel]
+    "/vpn/{vpn_name}/peer/{ip_address}/history", tags=["history"], response_model=list[PeerHistoryResponseModel]
 )
 def get_peer_history_ip_address(
     vpn_name: str = Path(
