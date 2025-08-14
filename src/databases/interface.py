@@ -1,13 +1,12 @@
 from __future__ import annotations
 import abc
-from typing import Optional, TYPE_CHECKING
-
-from models.peer_history import PeerHistoryResponseModel
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from models.peers import PeerDbModel
     from models.vpn import VpnModel
     from models.connection import ConnectionModel
+    from databases.dynamodb import PeerHistoryDynamoModel
 
 
 class AbstractDatabase(metaclass=abc.ABCMeta):
@@ -77,13 +76,15 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_tag_history_endpoint(
+    def get_tag_history(
         self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None
-    ) -> list[PeerHistoryResponseModel]:
+    ) -> dict[str, list[PeerHistoryDynamoModel]]:
+        """Return a list of peer history for a given tag in a VPN network."""
         pass
 
     @abc.abstractmethod
-    def get_peer_history_endpoint(
+    def get_peer_history(
         self, vpn_name: str, ip_address: str, start_time: str = None, end_time: str = None
-    ) -> list[PeerHistoryResponseModel]:
+    ) -> list[PeerHistoryDynamoModel]:
+        """Return a list of peer history for a given peer in a VPN network."""
         pass

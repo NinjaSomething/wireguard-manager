@@ -1054,9 +1054,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert response.status_code == 200
         data = response.json()
         # Assert all entries contains the expected tag
-        assert all(tag in d["tags"] for d in data)
-        # Assert the entries are in descending order by timestamp
-        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+        assert all(tag in peer_history["tags"] for peer_histories in data.values() for peer_history in peer_histories)
 
     def test_peer_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
         """Test peer history endpoint with start/end time filters."""
@@ -1090,11 +1088,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 4
+        assert sum(len(items) for items in data.values()) == 4
         # Assert all entries contains the expected tag
-        assert all(tag in d["tags"] for d in data)
-        # Assert the entries are in descending order by timestamp
-        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+        assert all(tag in peer_history["tags"] for peer_histories in data.values() for peer_history in peer_histories)
 
     def test_remove_tag_history(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
         """Remove a tag from a peer. Assert that the tag is removed from the peer's history."""

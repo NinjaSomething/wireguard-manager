@@ -4,6 +4,8 @@ from cryptography.hazmat.primitives import serialization
 import logging
 import ipaddress
 from uuid import uuid4
+
+from databases.dynamodb import PeerHistoryDynamoModel
 from databases.interface import AbstractDatabase
 from models.connection import ConnectionModel
 from models.peers import PeerDbModel, PeerRequestModel
@@ -282,8 +284,14 @@ class VpnManager:
         """Delete a tag from an existing peer"""
         self._db_manager.delete_tag_from_peer(vpn_name, peer_ip, tag)
 
-    def get_tag_history_endpoint(self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None):
-        return self._db_manager.get_tag_history_endpoint(vpn_name, tag, start_time, end_time)
+    def get_tag_history(
+        self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None
+    ) -> dict[str, list[PeerHistoryDynamoModel]]:
+        """Retrieve the history of a tag for a VPN network."""
+        return self._db_manager.get_tag_history(vpn_name, tag, start_time, end_time)
 
-    def get_peer_history_endpoint(self, vpn_name: str, ip_address: str, start_time: str = None, end_time: str = None):
-        return self._db_manager.get_peer_history_endpoint(vpn_name, ip_address, start_time, end_time)
+    def get_peer_history(
+        self, vpn_name: str, ip_address: str, start_time: str = None, end_time: str = None
+    ) -> list[PeerHistoryDynamoModel]:
+        """Retrieve the history of a peer for a VPN network."""
+        return self._db_manager.get_peer_history(vpn_name, ip_address, start_time, end_time)

@@ -11,7 +11,6 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ParamValidationError, ClientError
 from pydantic import BaseModel, ValidationError
 
-from models.peer_history import PeerHistoryResponseModel
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
 from models.connection import ConnectionType
@@ -41,11 +40,11 @@ class PeerBaseModel(BaseModel):
     private_key: Optional[str] = None
     persistent_keepalive: int
     allowed_ips: str
+    tags: list[str] = []
 
 
 class PeerDynamoModel(PeerBaseModel):
     peer_id: str
-    tags: list[str]
 
 
 class PeerHistoryDynamoModel(PeerBaseModel):
@@ -53,7 +52,6 @@ class PeerHistoryDynamoModel(PeerBaseModel):
     timestamp: int
     vpn_name_ip_addr: str
     vpn_name_tag: str
-    tag: Optional[str]
 
 
 class DynamoDb(InMemoryDataStore):
@@ -181,26 +179,34 @@ class DynamoDb(InMemoryDataStore):
         # TODO: Handle failure response
         super().add_peer(vpn_name, peer)  # Add the peer to the in-memory datastore
         # Write the peer history
-        self.write_peer_history(vpn_name, peer)
+        self.write_peers_history(vpn_name, peer)
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
-        self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
-        # TODO: Handle failure response
-        super().delete_peer(vpn_name, peer)  # Remove the peer from the in-memory datastore
-
         # Prevent overwriting original object, in case it's reused later
         temp_peer = deepcopy(peer)
         temp_peer.allowed_ips = ""
         temp_peer.public_key = ""
         temp_peer.private_key = None
         temp_peer.persistent_keepalive = 0
-        self.write_peer_history(vpn_name, temp_peer)
+        # Write history before deleting
+        self.write_peers_history(vpn_name, temp_peer)
+
+        # Delete the peer from the DynamoDB table
+        self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
+        # TODO: Handle failure response
+        # Remove the peer from the in-memory datastore
+        super().delete_peer(vpn_name, peer)
 
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Add a tag to a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag not in peer.tags:
             peer.tags.append(tag)
+
+            # Write the peer history
+            self.write_peers_history(vpn_name, peer)
+
+            # Update the peer in the DynamoDB table
             self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
@@ -208,25 +214,29 @@ class DynamoDb(InMemoryDataStore):
                 ReturnValues="UPDATED_NEW",
             )
             # TODO: Handle failure response
-            super().add_tag_to_peer(vpn_name, peer_ip, tag)  # Add the tag to the in-memory datastore
-            # Write the peer history
-            self.write_peer_history(vpn_name, peer)
+            # Add the tag to the in-memory datastore
+            super().add_tag_to_peer(vpn_name, peer_ip, tag)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete tag from a peer."""
         peer = self.get_peer(vpn_name, peer_ip)
         if peer is not None and tag in peer.tags:
             peer.tags.remove(tag)
+
+            # Write the peer history
+            self.write_peers_history(vpn_name, peer)
+
+            # Update the peer in the DynamoDB table
             self.peer_table.update_item(
                 Key={"peer_id": peer.peer_id},
                 UpdateExpression="set tags=:newTags",
                 ExpressionAttributeValues={":newTags": peer.tags},
                 ReturnValues="UPDATED_NEW",
             )
+
             # TODO: Handle failure response
-            super().delete_tag_from_peer(vpn_name, peer_ip, tag)  # Remove the tag from the in-memory datastore
-            # Write the peer history
-            self.write_peer_history(vpn_name, peer)
+            # Remove the tag from the in-memory datastore
+            super().delete_tag_from_peer(vpn_name, peer_ip, tag)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
@@ -248,12 +258,12 @@ class DynamoDb(InMemoryDataStore):
         # TODO: Handle failure response
         super().update_connection_info(vpn_name, connection_info)  # Update the in-memory datastore
 
-    def write_peer_to_history(self, peer: PeerHistoryDynamoModel):
+    def write_peer_history_db(self, peer: PeerHistoryDynamoModel):
         """
-        Write the peer history to the peer history table.
+        Write a tag-flattened peer history to the peer history table.
         """
+        item = peer.model_dump()
         try:
-            item = peer.model_dump()
             self.peer_history_table.put_item(Item=item)
         except ParamValidationError as e:
             # e.g. invalid types or missing required fields
@@ -291,8 +301,8 @@ class DynamoDb(InMemoryDataStore):
         peers_history = []
         try:
             for item in db_items:
-                peer_tag_history = PeerHistoryDynamoModel.model_validate(item)
-                peers_history.append(peer_tag_history)
+                peer_history = PeerHistoryDynamoModel.model_validate(item)
+                peers_history.append(peer_history)
         except ValidationError as e:
             logger.error("Validation error while processing peer history items: %s", e)
             raise ValueError("Peer history items have invalid data") from e
@@ -300,7 +310,7 @@ class DynamoDb(InMemoryDataStore):
 
     def get_tag_history(
         self, vpn_name: str, tag: str, start_time: Optional[str] = None, end_time: Optional[str] = None
-    ) -> list[PeerHistoryDynamoModel]:
+    ) -> dict[str, list[PeerHistoryDynamoModel]]:
         """
         Hit the peer history table. Group peers together and return combined peer history based on tag.
         """
@@ -327,54 +337,18 @@ class DynamoDb(InMemoryDataStore):
         except ValidationError as e:
             logger.error("Validation error while processing peer tag history items: %s", e)
             raise ValueError("Peer history items have invalid data") from e
-        return peers_tag_history
 
-    def _compress_history_by_timestamp(self, items: list[PeerHistoryDynamoModel]) -> list[PeerHistoryResponseModel]:
+        grouped_peers_tag_history = {
+            ip: sorted([obj for obj in peers_tag_history if obj.ip_address == ip], key=lambda x: x.timestamp)
+            for ip in {peer_tag_history.ip_address for peer_tag_history in peers_tag_history}
+        }
+
+        return grouped_peers_tag_history
+
+    def write_peers_history(self, vpn_name: str, peer: PeerDbModel):
         """
-        Collapse PeerHistoryDynamoModel items by timestamp only,
-        concatenating all tags for each timestamp.
-        """
-        # 1. Sort by timestamp
-        items_sorted = sorted(items, key=lambda it: it.timestamp)
-
-        result = []
-        # 2. Group by timestamp
-        for ts, group in groupby(items_sorted, key=lambda it: it.timestamp):
-            group_list = list(group)
-            first = group_list[0]
-
-            # collect tags for this timestamp
-            tags = [it.tag for it in group_list]
-
-            # build the response
-            response = PeerHistoryResponseModel(
-                ip_address=first.ip_address,
-                allowed_ips=first.allowed_ips,
-                public_key=first.public_key,
-                private_key=first.private_key if first.private_key else None,
-                persistent_keepalive=first.persistent_keepalive,
-                tags=tags,
-                timestamp=ts,
-            )
-            result.append(response)
-
-        return result
-
-    def get_tag_history_endpoint(
-        self, vpn_name: str, tag: str, start_time: Optional[int] = None, end_time: Optional[int] = None
-    ) -> list[PeerHistoryResponseModel]:
-        tag_history = self.get_tag_history(vpn_name, tag, start_time, end_time)
-        return self._compress_history_by_timestamp(items=tag_history)
-
-    def get_peer_history_endpoint(
-        self, vpn_name: str, ip_address: str, start_time: Optional[int] = None, end_time: Optional[int] = None
-    ) -> list[PeerHistoryResponseModel]:
-        peer_history = self.get_peer_history(vpn_name, ip_address, start_time, end_time)
-        return self._compress_history_by_timestamp(items=peer_history)
-
-    def write_peer_history(self, vpn_name: str, peer: PeerDbModel):
-        """
-        Write the peer history to the peer history table.
+        Write the peer history to the peer history table. Flatten the tags into individual entries.
+        If the peer has no tags, write a single entry with an empty tag.
         """
         timestamp = int(time.time_ns())
         if len(peer.tags) > 0:
@@ -390,9 +364,9 @@ class DynamoDb(InMemoryDataStore):
                     timestamp=timestamp,
                     vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
                     vpn_name_tag=f"{vpn_name}#{tag}",
-                    tag=tag,
+                    tags=peer.tags,
                 )
-                self.write_peer_to_history(peer_history)
+                self.write_peer_history_db(peer_history)
         else:
             peer_history = PeerHistoryDynamoModel(
                 vpn_name=vpn_name,
@@ -405,6 +379,5 @@ class DynamoDb(InMemoryDataStore):
                 timestamp=timestamp,
                 vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
                 vpn_name_tag=f"{vpn_name}#",
-                tag="",
             )
-            self.write_peer_to_history(peer_history)
+            self.write_peer_history_db(peer_history)
