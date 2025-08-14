@@ -77,7 +77,7 @@ class SshConnection(AbstractServerManager):
 
     def add_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Add a peer to the VPN server"""
-        cmd_to_execute = f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save wg0"
+        cmd_to_execute = f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} persistent-keepalive {peer.persistent_keepalive} allowed-ips {peer.ip_address} && sudo wg-quick save {vpn.wireguard.interface}"
         ssh_response = SshConnection._remote_ssh_command(cmd_to_execute, vpn.connection_info)
         if isinstance(ssh_response, str):
             raise ConnectionException(f"Failed to add peer to vpn: {ssh_response}")
