@@ -270,7 +270,7 @@ def get_peer_history_ip_address(
 
 
 @peer_router.get(
-    "/vpn/{vpn_name}/tag/{tag}/history", tags=["tag-history"], response_model=list[PeerHistoryResponseModel]
+    "/vpn/{vpn_name}/tag/{tag}/history", tags=["history"], response_model=list[PeerHistoryResponseModel]
 )
 def get_tag_history_tag(
     vpn_name: str = Path(
