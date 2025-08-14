@@ -51,6 +51,8 @@ class SsmConnection(AbstractServerManager):
             cmd_id = resp["Command"]["CommandId"]
         except ClientError as e:
             return f"SSM connection failed: {e}"
+        except Exception as e:
+            return f"SSM connection failed: {e}"
 
         # poll until the command finishes
         while True:
