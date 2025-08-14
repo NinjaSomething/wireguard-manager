@@ -13,8 +13,8 @@ class SsmConnectionModel(BaseModel):
 
 
 class SsmConnectionResponseModel(SsmConnectionModel, OpaqueModel):
-    aws_access_key_id: SecretStr = Field(..., description="The AWS access key ID")
-    aws_secret_access_key: SecretStr = Field(..., description="The AWS secret access key")
+    aws_access_key_id: Optional[SecretStr] = Field(None, description="The AWS access key ID")
+    aws_secret_access_key: Optional[SecretStr] = Field(None, description="The AWS secret access key")
 
     @field_serializer("aws_access_key_id", "aws_secret_access_key")
     def dump_secret_json(self, secret: SecretStr):
