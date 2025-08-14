@@ -339,7 +339,9 @@ class DynamoDb(InMemoryDataStore):
             raise ValueError("Peer history items have invalid data") from e
 
         grouped_peers_tag_history = {
-            ip: sorted([obj for obj in peers_tag_history if obj.ip_address == ip], key=lambda x: x.timestamp)
+            ip: sorted(
+                [obj for obj in peers_tag_history if obj.ip_address == ip], key=lambda x: x.timestamp, reverse=True
+            )
             for ip in {peer_tag_history.ip_address for peer_tag_history in peers_tag_history}
         }
 
