@@ -94,7 +94,7 @@ class DynamoDb(InMemoryDataStore):
                 public_key=dynamo_peer["public_key"],
                 private_key=dynamo_peer["private_key"],
                 persistent_keepalive=dynamo_peer["persistent_keepalive"],
-                allowed_ips=dynamo_peer["allowed_ips"],
+                allowed_ips=dynamo_peer["allowed_ips"].split(","),
                 tags=dynamo_peer["tags"],
             )
             if dynamo_peer["vpn_name"] not in vpn_peers:
@@ -145,7 +145,7 @@ class DynamoDb(InMemoryDataStore):
             public_key=peer.public_key,
             private_key=peer.private_key if peer.private_key else None,
             persistent_keepalive=peer.persistent_keepalive,
-            allowed_ips=peer.allowed_ips,
+            allowed_ips=",".join(peer.allowed_ips),
             tags=peer.tags,
         )
         self.peer_table.put_item(Item=peer_dynamo.model_dump())
