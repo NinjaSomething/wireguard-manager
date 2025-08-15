@@ -11,7 +11,7 @@ the [serverless directory](https://github.com/NinjaSomething/wireguard-manager/t
 few required parameters that you will need to provide.  You can see them listed below.
 
 ```bash
-serverless deploy --stage STAGE_NAME --param="vpc-id=VPC_ID" --param="pem-key-name=KEY_NAME" --param="wg-manager-version=VERSION"
+serverless deploy --stage STAGE_NAME --param="vpc-id=VPC_ID" --param="vpc-subnet-id=SUBNET_ID" --param="pem-key-name=KEY_NAME" --param="wg-manager-version=VERSION"
 ```
 
 This will use CloudFormation to create all the required resources in AWS.
