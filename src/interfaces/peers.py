@@ -80,7 +80,7 @@ PrivateKey = {peer.private_key if peer.private_key else "[INSERT_PRIVATE_KEY]"}
 
 [Peer]
 PublicKey = {vpn.wireguard.public_key}
-AllowedIPs = {peer.allowed_ips}
+AllowedIPs = {','.join(peer.allowed_ips)}
 Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info and vpn.connection_info.type==ConnectionType.SSH else "[INSERT_VPN_IP]"}:{vpn.wireguard.listen_port}
 PersistentKeepalive = {peer.persistent_keepalive}"""
     return response

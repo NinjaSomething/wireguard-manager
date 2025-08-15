@@ -117,7 +117,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key=None,
             persistent_keepalive=25,
@@ -138,7 +138,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.41.2",
-            allowed_ips="10.20.41.0/24",
+            allowed_ips=["10.20.41.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key=None,
             persistent_keepalive=25,
@@ -172,7 +172,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key="PEER_PRIVATE_KEY",
             persistent_keepalive=25,
@@ -232,7 +232,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY2",
             private_key=None,
             persistent_keepalive=25,
@@ -252,7 +252,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.40.3",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key=None,
             persistent_keepalive=25,
@@ -265,26 +265,6 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
 
-    def test_add_peer_invalid_address_space(self, test_input, mock_vpn_manager):
-        """Try adding peer using an address space that is larger than the VPN server's address space"""
-        # Set up Test
-        vpn = test_input
-        peer_router.vpn_manager = mock_vpn_manager
-        peer_config = PeerRequestModel(
-            ip_address="10.20.40.4",
-            allowed_ips="10.20.0.0/16",
-            public_key="PEER_PUBLIC_KEY2",
-            private_key=None,
-            persistent_keepalive=25,
-            tags=["tag1"],
-        )
-
-        # Execute Test
-        response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-
     def test_get_all_peers_hide_secrets(self, test_input, mock_vpn_manager):
         """Try getting all peers."""
         # Set up Test
@@ -293,7 +273,7 @@ class TestPeerInterface:
         expected_peers = [
             PeerResponseModel(
                 ip_address="10.20.40.2",
-                allowed_ips="10.20.40.0/24",
+                allowed_ips=["10.20.40.0/24"],
                 public_key="PEER_PUBLIC_KEY",
                 private_key=SecretStr("**********"),
                 persistent_keepalive=25,
@@ -316,7 +296,7 @@ class TestPeerInterface:
         expected_peers = [
             PeerResponseModel(
                 ip_address="10.20.40.2",
-                allowed_ips="10.20.40.0/24",
+                allowed_ips=["10.20.40.0/24"],
                 public_key="PEER_PUBLIC_KEY",
                 private_key=SecretStr("PEER_PRIVATE_KEY"),
                 persistent_keepalive=25,
@@ -370,7 +350,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key=SecretStr("PEER_PRIVATE_KEY"),
             persistent_keepalive=25,
@@ -390,7 +370,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
@@ -433,7 +413,7 @@ class TestPeerInterface:
 
         expected_peer = PeerRequestModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY",
             private_key="PEER_PRIVATE_KEY",
             persistent_keepalive=25,
@@ -446,7 +426,7 @@ PrivateKey = {expected_peer.private_key}
 
 [Peer]
 PublicKey = {vpn.wireguard.public_key}
-AllowedIPs = {expected_peer.allowed_ips}
+AllowedIPs = {",".join(expected_peer.allowed_ips)}
 Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info and vpn.connection_info.type==ConnectionType.SSH else "[INSERT_VPN_IP]"}:{vpn.wireguard.listen_port}
 PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
@@ -501,7 +481,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY".encode(), "GENERATED_PUBLIC_KEY".encode()]
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="GENERATED_PUBLIC_KEY",
             private_key=SecretStr("GENERATED_PRIVATE_KEY"),
             persistent_keepalive=25,
@@ -562,13 +542,16 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_peer_table,
         mock_dynamo_db,
     ):
-        """Try adding a peer but have the server auto-generate the keys and IP address"""
+        """
+        Try adding a peer but have the server auto-generate the keys and IP address.  This also tests adding multiple
+        allowed IPs and tags.
+        """
         # Set up Test
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
         mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY2".encode(), "GENERATED_PUBLIC_KEY2".encode()]
         peer_config = PeerRequestModel(
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
             persistent_keepalive=25,
             tags=["tag1", "tag2"],
         )
@@ -649,7 +632,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         expected_tag = "tag3"
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="GENERATED_PUBLIC_KEY",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
@@ -677,7 +660,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         expected_tag = "tag3"
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="GENERATED_PUBLIC_KEY",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
@@ -721,7 +704,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         expected_tag = "tag3"
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="GENERATED_PUBLIC_KEY",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
@@ -749,7 +732,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         expected_tag = "tag3"
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="GENERATED_PUBLIC_KEY",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
@@ -793,7 +776,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         expected_peers = [
             PeerResponseModel(
                 ip_address="10.20.40.2",
-                allowed_ips="10.20.40.0/24",
+                allowed_ips=["10.20.40.0/24"],
                 public_key="GENERATED_PUBLIC_KEY",
                 private_key=SecretStr("GENERATED_PRIVATE_KEY"),
                 persistent_keepalive=25,
@@ -801,7 +784,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             ),
             PeerResponseModel(
                 ip_address="10.20.40.3",
-                allowed_ips="10.20.40.0/24",
+                allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
                 public_key="GENERATED_PUBLIC_KEY2",
                 private_key=SecretStr("GENERATED_PRIVATE_KEY2"),
                 persistent_keepalive=25,
@@ -822,7 +805,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.3",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
             public_key="GENERATED_PUBLIC_KEY2",
             private_key=SecretStr("**********"),
             persistent_keepalive=25,
@@ -868,7 +851,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
         expected_peer = PeerRequestModel(
             ip_address="10.20.40.4",
-            allowed_ips="10.20.40.0/24",
+            allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY4",
             private_key=None,
             persistent_keepalive=25,
