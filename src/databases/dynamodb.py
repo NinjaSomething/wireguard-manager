@@ -67,7 +67,7 @@ class DynamoDb(InMemoryDataStore):
             dynamodb = boto3.resource("dynamodb", region_name=aws_region)
         self.vpn_table = dynamodb.Table(f"wireguard-manager-vpn-servers-{environment}")
         self.peer_table = dynamodb.Table(f"wireguard-manager-peers-{environment}")
-        self.peer_history_table = dynamodb.Table(f"wireguard-manager-peers-history-{environment.value}")
+        self.peer_history_table = dynamodb.Table(f"wireguard-manager-peers-history-{environment}")
         super().__init__()
 
     def _get_all_vpn_from_server(self) -> list[VpnModel]:
@@ -348,23 +348,8 @@ class DynamoDb(InMemoryDataStore):
         If the peer has no tags, write a single entry with an empty tag.
         """
         timestamp = int(time.time_ns())
-        if len(peer.tags) > 0:
-            for tag in peer.tags:
-                peer_history = PeerHistoryDynamoModel(
-                    vpn_name=vpn_name,
-                    ip_address=peer.ip_address,
-                    public_key=peer.public_key,
-                    private_key=peer.private_key,
-                    persistent_keepalive=peer.persistent_keepalive,
-                    allowed_ips=peer.allowed_ips,
-                    peer_history_id=uuid4().hex,
-                    timestamp=timestamp,
-                    vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
-                    vpn_name_tag=f"{vpn_name}#{tag}",
-                    tags=peer.tags,
-                )
-                self.write_peer_history_db(peer_history)
-        else:
+        _tags = peer.tags if len(peer.tags) > 0 else [""]
+        for tag in _tags:
             peer_history = PeerHistoryDynamoModel(
                 vpn_name=vpn_name,
                 ip_address=peer.ip_address,
@@ -375,6 +360,7 @@ class DynamoDb(InMemoryDataStore):
                 peer_history_id=uuid4().hex,
                 timestamp=timestamp,
                 vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",
-                vpn_name_tag=f"{vpn_name}#",
+                vpn_name_tag=f"{vpn_name}#{tag}",
+                tags=peer.tags,
             )
             self.write_peer_history_db(peer_history)

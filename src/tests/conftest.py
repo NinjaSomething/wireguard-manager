@@ -75,7 +75,7 @@ def mock_peer_history_table(serverless_configuration):
     with mock_aws():
         table_config = serverless_configuration["WireguardManagerPeersHistoryTable"]["Properties"]
         # override table name
-        table_config["TableName"] = f"wireguard-manager-peers-history-{Environment.STAGING.value}"
+        table_config["TableName"] = f"wireguard-manager-peers-history-test"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         peer_table = conn.create_table(**table_config)
         yield peer_table
