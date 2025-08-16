@@ -41,11 +41,11 @@ jobs:
           IMAGE_TAG: ${{ github.ref_name }}
         run: |
           echo "!!!! Building Docker image...$REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG"
-          docker build -t $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG .
+          docker build -t $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG -t $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:latest .
       - name: Push the Docker image
         env:
           REGISTRY: ${{ steps.login-ecr-public.outputs.registry }}
           IMAGE_TAG: ${{ github.ref_name }}
         run: |
           echo "!!!! Pushing Docker image...$REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG"
-          docker push $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY:$IMAGE_TAG
+          docker push $REGISTRY/$REGISTRY_ALIAS/$REPOSITORY --all-tags

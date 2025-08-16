@@ -8,7 +8,6 @@ from fastapi import FastAPI, Response
 from http import HTTPStatus
 from interfaces.vpn import vpn_router
 from interfaces.peers import peer_router
-from environment import Environment
 from databases.dynamodb import DynamoDb
 from vpn_manager import VpnManager
 
@@ -60,20 +59,19 @@ if __name__ == "__main__":
         "--dynamodb-endpoint",
         required=False,
         type=str,
-        default="http://dynamodb-local:8000",
-        help="The dynamodb endpoint.  This is only used for local dev testing.",
+        default=None,
+        help="The dynamodb endpoint.  This is only used for local dev testing. E.g. http://dynamodb-local:8000",
     )
     carg_parser.add(
         "--environment",
         required=True,
         type=str,
-        choices=[Environment.DEV.value, Environment.STAGING.value, Environment.PRODUCTION.value],
         help="Use this to configure which environment the service should use",
     )
     config = carg_parser.parse_args()
     log.info(f"The service is using the following config values\n{carg_parser.format_values()}")
     dynamo_db = DynamoDb(
-        environment=Environment(config.environment),
+        environment=config.environment,
         dynamodb_endpoint_url=config.dynamodb_endpoint,
         aws_region=config.aws_region,
     )

@@ -1,16 +1,18 @@
+# This will run the wireguard-manager locally
 version: '3.8'
 services:
   wg-manager:
     container_name: wg-manager
+    image: public.ecr.aws/g0d6f2g5/wireguard-manager:latest
     build:
       context: ./
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "80:5000"
     environment:
       - UVICORN_HOST=wg-manager
       - UVICORN_PORT=5000
-      - ENVIRONMENT=dev
+      - ENVIRONMENT=local-dev
       - AWS_REGION=us-west-2
       - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
     volumes:

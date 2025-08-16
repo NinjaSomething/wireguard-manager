@@ -4,51 +4,53 @@ provider:
   name: aws
   stage: ${opt:stage, 'stg'}
   region: us-west-2
+params:
+  default:
+    VpcId: ${param:vpc-id, null}
+    SubnetId: ${param:vpc-subnet-id, null}
+    PemKeyName: ${param:pem-key-name, null}
+    WgManagerVersion: ${param:wg-manager-version, 'latest'}
 resources: # CloudFormation template syntax
   Resources:
     WireguardManagerRole:
       Type: AWS::IAM::Role
       Properties:
-        RoleName: wireguard_manager_role
-        Path: /
+        RoleName: WireguardManagerRole-${self:provider.stage}
         AssumeRolePolicyDocument:
           Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Principal:
-                Service:
-                  - tasks.apprunner.amazonaws.com
+                Service: ec2.amazonaws.com
               Action:
                 - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         Policies:
-          - PolicyName: wireguard_manager_policy
+          - PolicyName: WireguardManagerPolicy-${self:provider.stage}
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
-                - Sid: VisualEditor0
-                  Effect: Allow
+                - Effect: Allow
                   Action:
                     - dynamodb:Scan
                     - dynamodb:PutItem
                     - dynamodb:DeleteItem
+                    - dynamodb:UpdateItem
                   Resource:
-                    - arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-*
-                    - arn:aws:dynamodb:*:*:table/wireguard-manager-peers-*
-    WireguardManagerKsmKey:
-      Type: AWS::KMS::Key
-      Properties:
-        Description: 'Wireguard Manager KSM Key'
-        Enabled: true
-        EnableKeyRotation: false
-        KeySpec: SYMMETRIC_DEFAULT
-        KeyUsage: ENCRYPT_DECRYPT
-        MultiRegion: false
-        Origin: AWS_KMS
-    #WireguardManagerKsmKeyAlias:
-    #  Type: AWS::KMS::Alias
-    #  Properties:
-    #    AliasName: alias/wireguard-manager-kms-${self:provider.stage}
-    #    TargetKeyId: !Ref WireguardManagerKsmKey
+                    - arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-${self:provider.stage}
+                    - arn:aws:dynamodb:*:*:table/wireguard-manager-peers-${self:provider.stage}
+                - Effect: Allow
+                  Action:
+                    - ssm:GetCommandInvocation
+                  Resource:
+                    - arn:aws:ssm:*:*:*
+                - Effect: Allow
+                  Action:
+                    - ssm:SendCommand
+                  Resource:
+                    - arn:aws:ec2:*:*:instance/*
+                    - arn:aws:ssm:*::document/AWS-RunShellScript
     WireguardManagerVpnServersTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -113,6 +115,42 @@ resources: # CloudFormation template syntax
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
+    WireguardManagerIamInstanceProfile:
+      Type: AWS::IAM::InstanceProfile
+      Properties:
+        InstanceProfileName: WireguardManagerIamInstanceProfile-${self:provider.stage}
+        Roles:
+          - !Ref WireguardManagerRole
+    WireguardManagerInstance:
+      Type: AWS::EC2::Instance
+      Properties:
+        Tags:
+          - Key: Name
+            Value: WireguardManager-${self:provider.stage}
+        ImageId: ami-05f991c49d264708f
+        KeyName: ${param:PemKeyName}
+        InstanceType: t2.micro
+        IamInstanceProfile: !Ref WireguardManagerIamInstanceProfile
+        SubnetId: ${param:SubnetId}
+        SecurityGroupIds:
+          - !Ref WireguardManagerSecurityGroup
+        UserData:
+          Fn::Base64: "#!/bin/bash\necho \"!!!!! Updating system and installing dependencies !!!!!\"\napt-get update -y\napt -y install curl apt-transport-https ca-certificates software-properties-common gnupg\necho \"!!!!! Setting up Docker repository !!!!!\"\ninstall -m 0755 -d /etc/apt/keyrings\ncurl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg \nchmod a+r /etc/apt/keyrings/docker.gpg\necho \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"${UBUNTU_CODENAME:-$VERSION_CODENAME}\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null\napt-get update -y\necho \"!!!!! Installing Docker !!!!!\"\napt install docker.io -y\nsystemctl start docker\necho \"!!!!! Installing Docker Compose!!!!!\"\nDOCKER_CONFIG=/usr/local/lib/docker\nmkdir -p $DOCKER_CONFIG/cli-plugins\ncurl -SL https://github.com/docker/compose/releases/download/v2.12.2/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose\nchmod +x $DOCKER_CONFIG/cli-plugins/docker-compose \necho \"!!!!! Writing docker-compose.yml: $PWD !!!!!\"\necho -e \"version: '3.8'\\nservices:\\n  wg-manager:\\n    container_name: wg-manager\\n    image: public.ecr.aws/g0d6f2g5/wireguard-manager:${param:WgManagerVersion}\\n    ports:\\n    - \\\"80:5000\\\"\\n    environment:\\n    - UVICORN_HOST=wg-manager\\n    - UVICORN_PORT=5000\\n    - ENVIRONMENT=${self:provider.stage}\\n    - AWS_REGION=us-west-2\\n    restart: on-failure\" > /root/docker-compose.yml\necho \"!!!!! Install the Wireguard Manager Service !!!!!\"\necho -e \"[Unit]\\nDescription=Starts the Wireguard Manager Docker container\\nRequires=docker.service\\nAfter=docker.service\\n\\n[Service]\\nType=oneshot\\nRemainAfterExit=yes\\nExecStart=/bin/bash -c \\\"docker compose -f /root/docker-compose.yml up -d\\\"\\nExecStop=/bin/bash -c \\\"docker compose -f /root/docker-compose.yml down\\\"\\n\\n[Install]\\nWantedBy=default.target\" > /etc/systemd/system/wireguard-manager.service\nsystemctl enable wireguard-manager.service\nsystemctl start wireguard-manager.service\n"
+    WireguardManagerSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupName: WireguardManagerSecurityGroup-${self:provider.stage}
+        GroupDescription: Wireguard Manager Security Group
+        VpcId: ${param:VpcId}
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: 0.0.0.0/0
+            Description: Allow access to the Swagger API
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            CidrIp: 0.0.0.0/0
 configValidationMode: error
 # The sections below are used for development
 plugins:
@@ -120,7 +158,7 @@ plugins:
 custom:
   dynamodb:
     stages:
-      - dev
+      - local-dev
     start:
       docker: true
       port: 8000
