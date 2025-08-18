@@ -244,12 +244,15 @@ def get_peer_history_ip_address(
     end_time: datetime = None,
     hide_secrets: bool = True,
 ) -> list[PeerHistoryResponseModel]:
-    """Get the history of a peer."""
+    """
+    Get the history of a peer. The start and end time are optional filters for identifying time ranges of interest.
+    Both start and end time are inclusive. If no start or end time is provided, the entire history will be returned.
+    """
     vpn_manager = peer_router.vpn_manager
     start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
-    if start_time_ns and end_time_ns and start_time_ns >= end_time_ns:
+    if start_time_ns and end_time_ns and start_time_ns > end_time_ns:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Start time must be before end time.",
@@ -284,14 +287,15 @@ def get_tag_history(
     hide_secrets: bool = True,
 ) -> dict[str, list[PeerHistoryResponseModel]]:
     """
-    Get the history of a peer by tag.
-    This will return the history of all peers that have the given tag in the VPN. Results are grouped by peer.
+    Get the history of a peer by tag. This will return the history of all peers that have the given tag in the VPN.
+    Results are grouped by peer. The start and end time are optional filters for identifying time ranges of interest.
+    Both start and end time are inclusive. If no start or end time is provided, the entire history will be returned.
     """
     vpn_manager = peer_router.vpn_manager
     start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
-    if start_time_ns and end_time_ns and start_time_ns >= end_time_ns:
+    if start_time_ns and end_time_ns and start_time_ns > end_time_ns:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Start time must be before end time.",
