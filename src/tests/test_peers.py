@@ -51,7 +51,7 @@ def test_get_tag_history_success(patch_router_vpn_manager):
                 "1.2.3.4": [
                     DummyHistory(
                         ip_address="1.2.3.4",
-                        allowed_ips="1.2.3.4/32",
+                        allowed_ips=["1.2.3.4/32"],
                         public_key="pub",
                         private_key=None,
                         persistent_keepalive=25,
@@ -62,7 +62,7 @@ def test_get_tag_history_success(patch_router_vpn_manager):
                 "5.6.7.8": [
                     DummyHistory(
                         ip_address="5.6.7.8",
-                        allowed_ips="5.6.7.8/32",
+                        allowed_ips=["5.6.7.8/32"],
                         public_key="pub2",
                         private_key=None,
                         persistent_keepalive=25,
@@ -96,7 +96,7 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
                 "1.2.3.4": [
                     DummyHistory(
                         ip_address="1.2.3.4",
-                        allowed_ips="1.2.3.4/32",
+                        allowed_ips=["1.2.3.4/32"],
                         public_key="pub",
                         private_key=None,
                         persistent_keepalive=25,
@@ -105,7 +105,7 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
                     ),
                     DummyHistory(
                         ip_address="1.2.3.4",
-                        allowed_ips="1.2.3.4/32",
+                        allowed_ips=["1.2.3.4/32"],
                         public_key="pub",
                         private_key=None,
                         persistent_keepalive=25,
@@ -116,7 +116,7 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
                 "5.6.7.8": [
                     DummyHistory(
                         ip_address="5.6.7.8",
-                        allowed_ips="5.6.7.8/32",
+                        allowed_ips=["5.6.7.8/32"],
                         public_key="pub2",
                         private_key=None,
                         persistent_keepalive=25,
@@ -165,7 +165,7 @@ def test_get_peer_history_ip_address_success(patch_router_vpn_manager):
             peer_history=[
                 DummyHistory(
                     ip_address="1.2.3.4",
-                    allowed_ips="1.2.3.4/32",
+                    allowed_ips=["1.2.3.4/32"],
                     public_key="pub",
                     private_key=None,
                     persistent_keepalive=25,

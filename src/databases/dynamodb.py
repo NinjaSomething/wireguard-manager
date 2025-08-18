@@ -9,7 +9,7 @@ from typing import Optional
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ParamValidationError, ClientError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 
 from models.vpn import WireguardModel, VpnModel
 from models.peers import PeerDbModel
@@ -38,8 +38,15 @@ class PeerBaseModel(BaseModel):
     public_key: str
     private_key: Optional[str] = None
     persistent_keepalive: int
-    allowed_ips: str
+    allowed_ips: list[str]
     tags: list[str] = []
+
+    @field_validator("allowed_ips", mode="before")
+    def transform_allowed_ips(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return value.split(",")
+        else:
+            return value
 
 
 class PeerDynamoModel(PeerBaseModel):
@@ -167,7 +174,7 @@ class DynamoDb(InMemoryDataStore):
             public_key=peer.public_key,
             private_key=peer.private_key if peer.private_key else None,
             persistent_keepalive=peer.persistent_keepalive,
-            allowed_ips=peer.allowed_ips,
+            allowed_ips=",".join(peer.allowed_ips),
             tags=peer.tags,
         )
         self.peer_table.put_item(Item=peer_dynamo.model_dump())
@@ -356,7 +363,7 @@ class DynamoDb(InMemoryDataStore):
                 public_key=peer.public_key,
                 private_key=peer.private_key,
                 persistent_keepalive=peer.persistent_keepalive,
-                allowed_ips=peer.allowed_ips,
+                allowed_ips=",".join(peer.allowed_ips),
                 peer_history_id=uuid4().hex,
                 timestamp=timestamp,
                 vpn_name_ip_addr=f"{vpn_name}#{peer.ip_address}",

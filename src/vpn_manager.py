@@ -119,19 +119,13 @@ class VpnManager:
             raise ValueError("No available IP addresses in the pool.")
         return available_ips[0]
 
-    def validate_ip_network(self, vpn_name, peer_allowed_ips: str):
+    def validate_ip_network(self, vpn_name, peer_allowed_ip: str):
         """Will raise a ValueError if the address space is not valid."""
-        if int(peer_allowed_ips.split("/")[1]) < 16:
+        if int(peer_allowed_ip.split("/")[1]) < 16:
             # Don't allow a peer to use address spaces larger than /16.  Generating that many IPs is not practical and
             # could crash the service.
-            raise ValueError(f"Address space [{peer_allowed_ips}] is too large. Allowed IPs must be /16 or smaller.")
-        peer_ip_network = set(ipaddress.ip_network(peer_allowed_ips).hosts())
-        _vpn = self.get_vpn(vpn_name)
-        if len(list(peer_ip_network - set(ipaddress.ip_network(_vpn.wireguard.ip_network).hosts()))) > 0:
-            raise BadRequestException(
-                f"Address space [{peer_allowed_ips}] is larger than the address space of the "
-                f"VPN server [{_vpn.wireguard.ip_network}]."
-            )
+            raise ValueError(f"Address space [{peer_allowed_ip}] is too large. Allowed IPs must be /16 or smaller.")
+        set(ipaddress.ip_network(peer_allowed_ip).hosts())
 
     def add_peer(self, vpn_name: str, peer: PeerRequestModel):
         """
@@ -166,7 +160,8 @@ class VpnManager:
             raise BadRequestException(f"IP address {peer.ip_address} is not available in VPN {vpn_name}")
 
         # Verify the allowed_ips are within the bounds of the VPN server address space
-        self.validate_ip_network(vpn_name, peer.allowed_ips)
+        for allowed_ip in peer.allowed_ips:
+            self.validate_ip_network(vpn_name, allowed_ip)
 
         if vpn.connection_info is not None:
             server_manager = server_manager_factory(vpn.connection_info.type)
@@ -260,7 +255,7 @@ class VpnManager:
                 public_key=peer.public_key,
                 private_key=None,
                 persistent_keepalive=peer.persistent_keepalive,
-                allowed_ips=_vpn.wireguard.ip_network,
+                allowed_ips=[_vpn.wireguard.ip_network],
                 tags=["imported"],
             )
             # Check if the peer already exists in the VPN
