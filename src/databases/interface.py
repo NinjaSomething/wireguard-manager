@@ -1,11 +1,12 @@
 from __future__ import annotations
 import abc
-import typing
+from typing import TYPE_CHECKING
 
-if typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from models.peers import PeerDbModel
     from models.vpn import VpnModel
     from models.connection import ConnectionModel
+    from databases.dynamodb import PeerHistoryDynamoModel
 
 
 class AbstractDatabase(metaclass=abc.ABCMeta):
@@ -72,4 +73,18 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
+        pass
+
+    @abc.abstractmethod
+    def get_tag_history(
+        self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None
+    ) -> dict[str, list[PeerHistoryDynamoModel]]:
+        """Return a list of peer history for a given tag in a VPN network."""
+        pass
+
+    @abc.abstractmethod
+    def get_peer_history(
+        self, vpn_name: str, ip_address: str, start_time: str = None, end_time: str = None
+    ) -> list[PeerHistoryDynamoModel]:
+        """Return a list of peer history for a given peer in a VPN network."""
         pass
