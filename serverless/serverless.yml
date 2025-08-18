@@ -37,9 +37,11 @@ resources: # CloudFormation template syntax
                     - dynamodb:PutItem
                     - dynamodb:DeleteItem
                     - dynamodb:UpdateItem
+                    - dynamodb:Query
                   Resource:
                     - arn:aws:dynamodb:*:*:table/wireguard-manager-vpn-servers-${self:provider.stage}
                     - arn:aws:dynamodb:*:*:table/wireguard-manager-peers-${self:provider.stage}
+                    - arn:aws:dynamodb:*:*:table/wireguard-manager-peers-history-${self:provider.stage}*
                 - Effect: Allow
                   Action:
                     - ssm:GetCommandInvocation
@@ -104,6 +106,9 @@ resources: # CloudFormation template syntax
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
           - IndexName: GSI-byTag
             KeySchema:
               - AttributeName: vpn_name_tag
@@ -112,6 +117,9 @@ resources: # CloudFormation template syntax
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
