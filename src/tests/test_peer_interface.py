@@ -4,8 +4,10 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import pytest
 from pydantic import SecretStr
+import datetime
 
 from app import app, vpn_router
+from models.peer_history import PeerHistoryResponseModel
 from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
 from models.vpn import VpnPutModel, WireguardModel, VpnModel
@@ -81,6 +83,7 @@ class TestPeerInterface:
         mock_ssh_command,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_vpn_manager,
         mock_dynamo_db,
         test_input,
@@ -164,6 +167,7 @@ class TestPeerInterface:
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Try adding a peer successfully."""
@@ -540,6 +544,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """
@@ -843,6 +848,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Importing peers from the wireguard server."""
@@ -953,6 +959,140 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         # Validate Results
         assert response.status_code == HTTPStatus.OK
 
+    def test_peer_history_invalid_time(
+        self,
+        test_input,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_peer_history_table,
+        mock_dynamo_db,
+    ):
+        """Test peer history endpoint with invalid start/end time."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.2"
+        now = datetime.datetime.now()
+        start = now
+        end = now - datetime.timedelta(hours=1)
+        response = client.get(
+            f"/vpn/{vpn.name}/peer/{ip}/history",
+            params={"start_time": start.isoformat(), "end_time": end.isoformat()},
+        )
+        assert response.status_code == 400
+        assert "Start time must be before end time" in response.text
+
+    def test_tag_history_invalid_time(self, test_input, mock_vpn_manager):
+        """Test tag history endpoint with invalid start/end time."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "tag1"
+        now = datetime.datetime.now()
+        start = now
+        end = now - datetime.timedelta(hours=1)
+        response = client.get(
+            f"/vpn/{vpn.name}/tag/{tag}/history",
+            params={"start_time": start.isoformat(), "end_time": end.isoformat()},
+        )
+        assert response.status_code == 400
+        assert "Start time must be before end time" in response.text
+
+    def test_peer_history_no_history(self, test_input, mock_vpn_manager):
+        """Test peer history endpoint when there is no history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.99"
+        response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
+        assert response.status_code == 404
+        assert "No peer history found" in response.text
+
+    def test_tag_history_no_history(self, test_input, mock_vpn_manager):
+        """Test tag history endpoint when there is no history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "nope"
+        response = client.get(f"/vpn/{vpn.name}/tag/{tag}/history")
+        assert response.status_code == 404
+        assert "No tag_history found" in response.text
+
+    def test_peer_history_all(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test peer history endpoint returns all history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.2"
+        response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
+        assert response.status_code == 200
+        data = response.json()
+        # Assert all entries contains the expect ip address
+        assert all(d["ip_address"] == ip for d in data)
+        # Assert the entries are in descending order by timestamp
+        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+
+    def test_tag_history_all(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test tag history endpoint returns all history."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "tag1"
+        response = client.get(f"/vpn/{vpn.name}/tag/{tag}/history")
+        assert response.status_code == 200
+        data = response.json()
+        # Assert all entries contains the expected tag
+        assert all(tag in peer_history["tags"] for peer_histories in data.values() for peer_history in peer_histories)
+
+    def test_peer_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test peer history endpoint with start/end time filters."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        ip = "10.20.40.2"
+        start = 1626000000000000000
+        end = 1626000003000000000
+        response = client.get(
+            f"/vpn/{vpn.name}/peer/{ip}/history",
+            params={"start_time": start / 1_000_000_000, "end_time": end / 1_000_000_000},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 3
+        # Assert all entries contains the expect ip address
+        assert all(d["ip_address"] == ip for d in data)
+        # Assert the entries are in descending order by timestamp
+        assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+
+    def test_tag_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
+        """Test tag history endpoint with start/end time filters."""
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        tag = "tag1"
+        start = 1626000000000000000
+        end = 1626000003000000000
+        response = client.get(
+            f"/vpn/{vpn.name}/tag/{tag}/history",
+            params={"start_time": start / 1_000_000_000, "end_time": end / 1_000_000_000},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert sum(len(items) for items in data.values()) == 4
+        # Assert all entries contains the expected tag
+        assert all(tag in peer_history["tags"] for peer_histories in data.values() for peer_history in peer_histories)
+
+    def test_remove_tag_history(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Remove a tag from a peer. Assert that the tag is removed from the peer's history."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        test_tag = "tag1"
+        test_ip_address = "10.20.40.2"
+
+        # Execute Test
+        client.delete(f"/vpn/{vpn.name}/peer/{test_ip_address}/tag/{test_tag}")
+
+        # Validate Results
+        response = client.get(f"/vpn/{vpn.name}/peer/{test_ip_address}/history")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert test_tag not in PeerHistoryResponseModel(**data[0]).tags
+
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -966,6 +1106,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_vpn_manager,
         mock_vpn_table,
         mock_peer_table,
+        mock_peer_history_table,
         mock_dynamo_db,
     ):
         """Delete a peer."""
@@ -1009,6 +1150,26 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                 for wg_peer in mock_ssh_command.peers:
                     if wg_peer.wg_ip_address == delete_ip:
                         assert wg_peer.wg_ip_address != delete_ip
+
+    def test_peer_history_no_exist(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+        """Test peer history was removed after deletion"""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        delete_ips = ["10.20.40.2", "10.20.40.3"]
+
+        for delete_ip in delete_ips:
+            # Execute Test - Get history of deleted peer
+            response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}/history")
+            assert response.status_code == 200
+            data = PeerHistoryResponseModel(**response.json()[0])
+
+            # Validate Results
+            assert data.ip_address == delete_ip
+            assert data.allowed_ips == ""
+            assert data.public_key == ""
+            assert data.private_key == None
+            assert data.persistent_keepalive == 0
 
     def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
         """Test deleting a VPN server"""

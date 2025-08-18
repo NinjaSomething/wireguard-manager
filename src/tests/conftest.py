@@ -1,5 +1,7 @@
+from itertools import count
+
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import boto3
 import yaml
 from moto import mock_aws
@@ -31,6 +33,21 @@ def serverless_configuration():
     return config["resources"]["Resources"]
 
 
+START_TS = 1_626_000_000_000_000_000
+ONE_SEC_NS = 1_000_000_000
+ts_counter = count(START_TS, ONE_SEC_NS)
+
+
+@pytest.fixture(scope="class", autouse=True)
+def incr_time_ns():
+    """
+    Before any test in the class runs, patch time.time_ns to return
+    next(ts_counter) on each call.
+    """
+    with patch("time.time_ns", side_effect=lambda: next(ts_counter)):
+        yield
+
+
 @pytest.fixture(scope="class")
 def mock_vpn_table(serverless_configuration):
     with mock_aws():
@@ -48,6 +65,17 @@ def mock_peer_table(serverless_configuration):
         table_config = serverless_configuration["WireguardManagerPeersTable"]["Properties"]
         # override table name
         table_config["TableName"] = f"wireguard-manager-peers-test"
+        conn = boto3.resource("dynamodb", region_name="us-west-2")
+        peer_table = conn.create_table(**table_config)
+        yield peer_table
+
+
+@pytest.fixture(scope="class")
+def mock_peer_history_table(serverless_configuration):
+    with mock_aws():
+        table_config = serverless_configuration["WireguardManagerPeersHistoryTable"]["Properties"]
+        # override table name
+        table_config["TableName"] = f"wireguard-manager-peers-history-test"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         peer_table = conn.create_table(**table_config)
         yield peer_table
