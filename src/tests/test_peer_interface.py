@@ -1166,9 +1166,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
             # Validate Results
             assert data.ip_address == delete_ip
-            assert data.allowed_ips == ""
+            assert data.allowed_ips == [""]
             assert data.public_key == ""
-            assert data.private_key == None
+            assert data.private_key is None
             assert data.persistent_keepalive == 0
 
     def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):

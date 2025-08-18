@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, SecretStr, PrivateAttr, field_serializer
+from pydantic import BaseModel, Field, SecretStr, PrivateAttr, field_serializer, field_validator
 from typing import Optional
 
 
@@ -9,7 +9,7 @@ class PeerRequestModel(BaseModel):
         None,
         description="The wireguard IP address of the peer.  If not provided, the next available IP on the VPN will be used.",
     )
-    allowed_ips: list[str] = Field(..., description="This defines the IPs that are allowed ")
+    allowed_ips: str | list[str] = Field(..., description="This defines the IPs that are allowed ")
     public_key: str | None = Field(
         None,
         description="The public wireguard key for the peer.  If this is not provide the key-pair will be auto "
@@ -18,6 +18,13 @@ class PeerRequestModel(BaseModel):
     private_key: str | None = Field(None, description="The private wireguard key for the peer.")
     persistent_keepalive: int = Field(..., description="The wireguard keep-alive configuration for the peer.")
     tags: list[str] = Field(..., description="Tags associated with the wireguard peer.")
+
+    @field_validator("allowed_ips", mode="before")
+    def transform_allowed_ips(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return value.split(",")
+        else:
+            return value
 
 
 # -----------------------------------------------------------
