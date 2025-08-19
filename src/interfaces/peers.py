@@ -126,7 +126,7 @@ def add_peer(
     return PeerResponseModel(**peer.model_dump())
 
 
-@peer_router.post("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"], response_model=PeerResponseModel)
+@peer_router.put("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"], response_model=PeerResponseModel)
 def update_peer(
     peer: PeerUpdateRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
@@ -144,7 +144,7 @@ def update_peer(
     except ConflictException as ex:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(ex))
 
-    return PeerResponseModel(**peer.model_dump())
+    return PeerResponseModel(**peer.model_dump(), ip_address=ip_address)
 
 
 @peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"])
