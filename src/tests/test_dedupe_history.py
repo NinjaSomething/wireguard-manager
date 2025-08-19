@@ -196,3 +196,31 @@ def test_dedupe_history_three_identical():
     deduped = db.dedupe_history([peer1, peer2, peer3])
     assert len(deduped) == 1
     assert deduped[0].ip_address == "10.0.0.2"
+
+
+def test_dedupe_history_no_duplicates_returns_same_list():
+    db = DynamoDb.__new__(DynamoDb)
+    base = {
+        "vpn_name": "vpn1",
+        "public_key": "pubkey1",
+        "private_key": "privkey1",
+        "persistent_keepalive": 25,
+        "timestamp": 123456789,
+        "vpn_name_ip_addr": "vpn1#10.0.0.2",
+        "vpn_name_tag": "vpn1#tag1",
+        "tags": ["tag1"],
+    }
+    peer1 = PeerHistoryDynamoModel(
+        **{**base, "ip_address": "10.0.0.2", "peer_history_id": "id1", "allowed_ips": ["10.0.0.2/32"]}
+    )
+    peer2 = PeerHistoryDynamoModel(
+        **{**base, "ip_address": "10.0.0.3", "peer_history_id": "id2", "allowed_ips": ["10.0.0.3/32"]}
+    )
+    peer3 = PeerHistoryDynamoModel(
+        **{**base, "ip_address": "10.0.0.4", "peer_history_id": "id3", "allowed_ips": ["10.0.0.4/32"]}
+    )
+    input_list = [peer1, peer2, peer3]
+    deduped = db.dedupe_history(input_list)
+    assert len(deduped) == len(input_list)
+    # Ensure all original objects are present
+    assert set(p.ip_address for p in deduped) == {"10.0.0.2", "10.0.0.3", "10.0.0.4"}
