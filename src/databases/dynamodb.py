@@ -291,9 +291,11 @@ class DynamoDb(InMemoryDataStore):
         # Convert non-hashable dicts to hashable tuples for deduplication
         # This is necessary because lists are not hashable by default
         def make_hashable(d):
-            # Exclude peer_history_id from the hashable tuple
+            # Exclude peer_history_id from the hashable tuple; Exclude vpn_name_tag and vpn_name_ip_addr as well since they're just for indexing purposes
             return tuple(
-                (k, tuple(v) if isinstance(v, list) else v) for k, v in sorted(d.items()) if k != "peer_history_id"
+                (k, tuple(v) if isinstance(v, list) else v)
+                for k, v in sorted(d.items())
+                if (k != "peer_history_id" and k != "vpn_name_tag" and k != "vpn_name_ip_addr")
             )
 
         # Store hashable object as key, and the peer_history as value. Use key to deduplicate and convert back into the deduped list.

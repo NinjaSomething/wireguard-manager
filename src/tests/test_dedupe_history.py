@@ -5,7 +5,7 @@ from databases.dynamodb import PeerHistoryDynamoModel, DynamoDb
 
 @pytest.fixture
 def sample_peer_histories():
-    # Two identical, one different
+    # Two identical except for peer_history_id, vpn_name_tag, vpn_name_ip_addr; one different
     base = {
         "vpn_name": "vpn1",
         "ip_address": "10.0.0.2",
@@ -17,11 +17,26 @@ def sample_peer_histories():
         "timestamp": 123456789,
         "vpn_name_ip_addr": "vpn1#10.0.0.2",
         "vpn_name_tag": "vpn1#tag1",
-        "tags": ["tag1"],
+        "tags": ["tag1", "tag2", "tag3"],
     }
     peer1 = PeerHistoryDynamoModel(**base)
-    peer2 = PeerHistoryDynamoModel(**{**base, "peer_history_id": str(uuid.uuid4())})  # duplicate except GUID
-    peer3 = PeerHistoryDynamoModel(**{**base, "ip_address": "10.0.0.3", "peer_history_id": str(uuid.uuid4())})
+    peer2 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag2",
+        }
+    )  # duplicate except GUID and excluded fields
+    peer3 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "ip_address": "10.0.0.3",
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.3",
+            "vpn_name_tag": "vpn1#tag3",
+        }
+    )
     return [peer1, peer2, peer3]
 
 
@@ -49,13 +64,35 @@ def test_dedupe_history_all_unique():
         "persistent_keepalive": 25,
         "allowed_ips": ["10.0.0.2/32"],
         "timestamp": 123456789,
-        "vpn_name_ip_addr": "vpn1#10.0.0.2",
-        "vpn_name_tag": "vpn1#tag1",
-        "tags": ["tag1"],
+        "tags": ["tag1", "tag2", "tag3"],
     }
-    peer1 = PeerHistoryDynamoModel(**{**base, "ip_address": "10.0.0.2", "peer_history_id": str(uuid.uuid4())})
-    peer2 = PeerHistoryDynamoModel(**{**base, "ip_address": "10.0.0.3", "peer_history_id": str(uuid.uuid4())})
-    peer3 = PeerHistoryDynamoModel(**{**base, "ip_address": "10.0.0.4", "peer_history_id": str(uuid.uuid4())})
+    peer1 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "ip_address": "10.0.0.2",
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag1",
+        }
+    )
+    peer2 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "ip_address": "10.0.0.3",
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.3",
+            "vpn_name_tag": "vpn1#tag2",
+        }
+    )
+    peer3 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "ip_address": "10.0.0.4",
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.4",
+            "vpn_name_tag": "vpn1#tag3",
+        }
+    )
     peers = [peer1, peer2, peer3]
     deduped = db.dedupe_history(peers)
     assert len(deduped) == 3
@@ -72,14 +109,14 @@ def test_dedupe_history_different_list_order():
         "persistent_keepalive": 25,
         "peer_history_id": str(uuid.uuid4()),
         "timestamp": 123456789,
-        "vpn_name_ip_addr": "vpn1#10.0.0.2",
-        "vpn_name_tag": "vpn1#tag1",
     }
     peer1 = PeerHistoryDynamoModel(
         **{
             **base,
             "allowed_ips": ["10.0.0.2/32", "10.0.0.3/32"],
             "tags": ["tag1", "tag2"],
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag1",
             "peer_history_id": str(uuid.uuid4()),
         }
     )
@@ -88,6 +125,8 @@ def test_dedupe_history_different_list_order():
             **base,
             "allowed_ips": ["10.0.0.3/32", "10.0.0.2/32"],
             "tags": ["tag2", "tag1"],
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag1",
             "peer_history_id": str(uuid.uuid4()),
         }
     )
@@ -105,13 +144,25 @@ def test_dedupe_history_identical_except_non_key_field():
         "private_key": "privkey1",
         "persistent_keepalive": 25,
         "allowed_ips": ["10.0.0.2/32"],
-        "tags": ["tag1"],
+        "tags": ["tag1", "tag2"],
         "timestamp": 123456789,
-        "vpn_name_ip_addr": "vpn1#10.0.0.2",
-        "vpn_name_tag": "vpn1#tag1",
     }
-    peer1 = PeerHistoryDynamoModel(**{**base, "peer_history_id": str(uuid.uuid4())})
-    peer2 = PeerHistoryDynamoModel(**{**base, "peer_history_id": str(uuid.uuid4())})
+    peer1 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag1",
+        }
+    )
+    peer2 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag2",
+        }
+    )
     deduped = db.dedupe_history([peer1, peer2])
     # Now these are considered duplicates, so only one should remain
     assert len(deduped) == 1
@@ -127,11 +178,27 @@ def test_dedupe_history_empty_tags_and_allowed_ips():
         "persistent_keepalive": 25,
         "peer_history_id": str(uuid.uuid4()),
         "timestamp": 123456789,
-        "vpn_name_ip_addr": "vpn1#10.0.0.2",
-        "vpn_name_tag": "vpn1#tag1",
     }
-    peer1 = PeerHistoryDynamoModel(**{**base, "allowed_ips": [], "tags": [], "peer_history_id": str(uuid.uuid4())})
-    peer2 = PeerHistoryDynamoModel(**{**base, "allowed_ips": [], "tags": [], "peer_history_id": str(uuid.uuid4())})
+    peer1 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "allowed_ips": [],
+            "tags": [],
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag1",
+            "peer_history_id": str(uuid.uuid4()),
+        }
+    )
+    peer2 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "allowed_ips": [],
+            "tags": [],
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag2",
+            "peer_history_id": str(uuid.uuid4()),
+        }
+    )
     deduped = db.dedupe_history([peer1, peer2])
     assert len(deduped) == 1
 
@@ -149,7 +216,7 @@ def test_dedupe_history_mixed_types_and_duplicates():
         timestamp=123456789,
         vpn_name_ip_addr="vpn1#10.0.0.2",
         vpn_name_tag="vpn1#tag1",
-        tags=["tag1"],
+        tags=["tag1", "tag2"],
     )
     peer2 = PeerHistoryDynamoModel(
         vpn_name="vpn1",
@@ -161,8 +228,8 @@ def test_dedupe_history_mixed_types_and_duplicates():
         peer_history_id=str(uuid.uuid4()),
         timestamp=123456789,
         vpn_name_ip_addr="vpn1#10.0.0.2",
-        vpn_name_tag="vpn1#tag1",
-        tags=["tag1"],
+        vpn_name_tag="vpn1#tag2",
+        tags=["tag1", "tag2"],
     )
     peer3 = PeerHistoryDynamoModel(
         vpn_name="vpn2",
@@ -193,15 +260,33 @@ def test_dedupe_history_three_identical():
         "private_key": "privkey1",
         "persistent_keepalive": 25,
         "allowed_ips": ["10.0.0.2/32"],
-        "peer_history_id": str(uuid.uuid4()),
         "timestamp": 123456789,
-        "vpn_name_ip_addr": "vpn1#10.0.0.2",
-        "vpn_name_tag": "vpn1#tag1",
-        "tags": ["tag1"],
+        "tags": ["tag1", "tag2", "tag3"],
     }
-    peer1 = PeerHistoryDynamoModel(**{**base, "peer_history_id": str(uuid.uuid4())})
-    peer2 = PeerHistoryDynamoModel(**{**base, "peer_history_id": str(uuid.uuid4())})
-    peer3 = PeerHistoryDynamoModel(**{**base, "peer_history_id": str(uuid.uuid4())})
+    peer1 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag1",
+        }
+    )
+    peer2 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag2",
+        }
+    )
+    peer3 = PeerHistoryDynamoModel(
+        **{
+            **base,
+            "peer_history_id": str(uuid.uuid4()),
+            "vpn_name_ip_addr": "vpn1#10.0.0.2",
+            "vpn_name_tag": "vpn1#tag3",
+        }
+    )
     deduped = db.dedupe_history([peer1, peer2, peer3])
     assert len(deduped) == 1
     assert deduped[0].ip_address == "10.0.0.2"
