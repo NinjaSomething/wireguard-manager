@@ -132,7 +132,7 @@ def update_peer(
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     ip_address: str = Path(..., description="The IP address of the peer to update.", example="10.98.0.99"),
 ) -> PeerResponseModel:
-    """Add a new peer to a VPN."""
+    """Update an existing peer or add a new one if it does not exist."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     try:
