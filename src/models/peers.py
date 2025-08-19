@@ -4,11 +4,7 @@ from typing import Optional
 
 # -----------------------------------------------------------
 # API Request Models
-class PeerRequestModel(BaseModel):
-    ip_address: Optional[str] = Field(
-        None,
-        description="The wireguard IP address of the peer.  If not provided, the next available IP on the VPN will be used.",
-    )
+class PeerUpdateRequestModel(BaseModel):
     allowed_ips: str | list[str] = Field(..., description="This defines the IPs that are allowed ")
     public_key: str | None = Field(
         None,
@@ -25,6 +21,13 @@ class PeerRequestModel(BaseModel):
             return value.split(",")
         else:
             return value
+
+
+class PeerRequestModel(PeerUpdateRequestModel):
+    ip_address: Optional[str] = Field(
+        None,
+        description="The wireguard IP address of the peer.  If not provided, the next available IP on the VPN will be used.",
+    )
 
 
 # -----------------------------------------------------------

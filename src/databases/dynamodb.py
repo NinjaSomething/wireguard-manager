@@ -129,7 +129,7 @@ class DynamoDb(InMemoryDataStore):
             if dynamo_peer["vpn_name"] not in vpn_peers:
                 vpn_peers[dynamo_peer["vpn_name"]] = []
             vpn_peers[dynamo_peer["vpn_name"]].append(peer)
-        return vpn_peers
+        return {k: sorted(v, key=lambda p: p.ip_address) for k, v in vpn_peers.items()}
 
     def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
@@ -199,46 +199,27 @@ class DynamoDb(InMemoryDataStore):
         # Remove the peer from the in-memory datastore
         super().delete_peer(vpn_name, peer)
 
-    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
-        """Add a tag to a peer."""
-        peer = self.get_peer(vpn_name, peer_ip)
-        if peer is not None and tag not in peer.tags:
-            peer.tags.append(tag)
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel):
+        """Update an existing peer."""
+        # Update the peer in the DynamoDB table
+        self.peer_table.update_item(
+            Key={"peer_id": updated_peer.peer_id},
+            UpdateExpression="set tags=:newTags, allowed_ips=:newAllowedIps, public_key=:newPublicKey, private_key=:newPrivateKey, persistent_keepalive=:newPersistentKeepalive",
+            ExpressionAttributeValues={
+                ":newTags": updated_peer.tags,
+                ":newAllowedIps": updated_peer.allowed_ips,
+                ":newPublicKey": updated_peer.public_key,
+                ":newPrivateKey": updated_peer.private_key,
+                ":newPersistentKeepalive": updated_peer.persistent_keepalive,
+            },
+            ReturnValues="UPDATED_NEW",
+        )
+        # TODO: Handle failure response
+        # Update the in-memory datastore
+        super().update_peer(vpn_name, updated_peer)
 
-            # Write the peer history
-            self.write_peers_history(vpn_name, peer)
-
-            # Update the peer in the DynamoDB table
-            self.peer_table.update_item(
-                Key={"peer_id": peer.peer_id},
-                UpdateExpression="set tags=:newTags",
-                ExpressionAttributeValues={":newTags": peer.tags + [tag]},
-                ReturnValues="UPDATED_NEW",
-            )
-            # TODO: Handle failure response
-            # Add the tag to the in-memory datastore
-            super().add_tag_to_peer(vpn_name, peer_ip, tag)
-
-    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
-        """Delete tag from a peer."""
-        peer = self.get_peer(vpn_name, peer_ip)
-        if peer is not None and tag in peer.tags:
-            peer.tags.remove(tag)
-
-            # Write the peer history
-            self.write_peers_history(vpn_name, peer)
-
-            # Update the peer in the DynamoDB table
-            self.peer_table.update_item(
-                Key={"peer_id": peer.peer_id},
-                UpdateExpression="set tags=:newTags",
-                ExpressionAttributeValues={":newTags": peer.tags},
-                ReturnValues="UPDATED_NEW",
-            )
-
-            # TODO: Handle failure response
-            # Remove the tag from the in-memory datastore
-            super().delete_tag_from_peer(vpn_name, peer_ip, tag)
+        # Write the peer history
+        self.write_peers_history(vpn_name, updated_peer)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""

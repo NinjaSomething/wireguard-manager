@@ -8,7 +8,7 @@ from uuid import uuid4
 from databases.dynamodb import PeerHistoryDynamoModel
 from databases.interface import AbstractDatabase
 from models.connection import ConnectionModel
-from models.peers import PeerDbModel, PeerRequestModel
+from models.peers import PeerDbModel, PeerRequestModel, PeerUpdateRequestModel
 from models.vpn import VpnPutModel, VpnModel
 from server_manager import server_manager_factory
 
@@ -169,6 +169,26 @@ class VpnManager:
 
         self._db_manager.add_peer(vpn_name=vpn_name, peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())))
 
+    def update_peer(self, vpn_name: str, updated_peer: PeerRequestModel):
+        existing_peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=updated_peer.ip_address)
+        if not existing_peer:
+            self.add_peer(vpn_name, updated_peer)
+        else:
+            if (
+                existing_peer.public_key != updated_peer.public_key
+                or existing_peer.private_key != updated_peer.private_key
+            ):
+                vpn = self.get_vpn(vpn_name)
+                if vpn.connection_info is not None:
+                    server_manager = server_manager_factory(vpn.connection_info.type)
+                    server_manager.remove_peer(vpn, existing_peer)
+                    server_manager.add_peer(vpn, updated_peer)
+            self._db_manager.update_peer(
+                vpn_name=vpn_name,
+                updated_peer=PeerDbModel(**updated_peer.model_dump(), peer_id=existing_peer.peer_id),
+            )
+        return updated_peer
+
     def get_all_peers(self, vpn_name: str) -> list[PeerDbModel]:
         """
         Get all peers for a given VPN.
@@ -204,6 +224,7 @@ class VpnManager:
         """
         # generate private key
         private_key = X25519PrivateKey.generate()
+
         bytes_ = private_key.private_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PrivateFormat.Raw,
@@ -226,19 +247,21 @@ class VpnManager:
         :param vpn_name: The name of the VPN the peer is in.
         :param ip_address: The IP address of the peer to update.
         """
-        vpn = self.get_vpn(vpn_name)
+
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
-        if vpn.connection_info is not None:
-            server_manager = server_manager_factory(vpn.connection_info.type)
-            server_manager.remove_peer(vpn, peer)
-
-        self._db_manager.delete_peer(vpn_name, peer)
-        peer.private_key, peer.public_key = self.generate_wireguard_keys()
-        self._db_manager.add_peer(vpn_name, peer)
-
-        if vpn.connection_info is not None:
-            server_manager.add_peer(vpn, peer)
-        return peer
+        new_private_key, new_public_key = self.generate_wireguard_keys()
+        updated_peer = self.update_peer(
+            vpn_name,
+            PeerRequestModel(
+                private_key=new_private_key,
+                public_key=new_public_key,
+                allowed_ips=peer.allowed_ips,
+                persistent_keepalive=peer.persistent_keepalive,
+                tags=peer.tags,
+                ip_address=peer.ip_address,
+            ),
+        )
+        return updated_peer
 
     def import_peers(self, vpn_name: str) -> list[PeerRequestModel]:
         """This downloads the wireguard server peers and imports any that don't already exist."""
@@ -273,11 +296,17 @@ class VpnManager:
 
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Add a tag to an existing peer"""
-        self._db_manager.add_tag_to_peer(vpn_name, peer_ip, tag)
+        peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=peer_ip)
+        if tag not in peer.tags:
+            peer.tags.append(tag)
+            self._db_manager.update_peer(vpn_name, peer)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
         """Delete a tag from an existing peer"""
-        self._db_manager.delete_tag_from_peer(vpn_name, peer_ip, tag)
+        peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=peer_ip)
+        if tag in peer.tags:
+            peer.tags.remove(tag)
+            self._db_manager.update_peer(vpn_name, peer)
 
     def get_tag_history(
         self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None

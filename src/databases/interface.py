@@ -41,6 +41,11 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel):
+        """Update an existing peer in the database.  If the peer does not exist, raise a ValueError exception."""
+        pass
+
+    @abc.abstractmethod
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
         """Remove a peer from the database."""
         pass
@@ -58,16 +63,6 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def get_peer(self, vpn_name: str, peer_ip: str) -> PeerDbModel:
         """Return a specific peer from the database.  If the peer does not exist, return None."""
-        pass
-
-    @abc.abstractmethod
-    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
-        """Add a tag to a peer."""
-        pass
-
-    @abc.abstractmethod
-    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
-        """Delete tag from a peer."""
         pass
 
     @abc.abstractmethod

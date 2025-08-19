@@ -62,6 +62,13 @@ class InMemoryDataStore(AbstractDatabase):
             raise ValueError("Duplicate peer")
         self._vpn_peers[vpn_name].append(peer)
 
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel):
+        """Update an existing peer in the database."""
+        old_peer = self.get_peer(vpn_name, updated_peer.ip_address)
+        if old_peer is not None:
+            self._vpn_peers[vpn_name].remove(old_peer)
+        self._vpn_peers[vpn_name].append(updated_peer)
+
     def delete_peer(self, vpn_name: str, peer: PeerDbModel):
         if vpn_name in self._vpn_peers:
             if peer in self._vpn_peers[vpn_name]:
@@ -91,22 +98,6 @@ class InMemoryDataStore(AbstractDatabase):
             if peer.ip_address == peer_ip:
                 return peer
         return None
-
-    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
-        """Add a tag to a peer."""
-        if vpn_name in self._vpn_peers:
-            for peer in self._vpn_peers[vpn_name]:
-                if peer.ip_address == peer_ip:
-                    if peer is not None and tag not in peer.tags:
-                        peer.tags.append(tag)
-
-    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
-        """Delete tag from a peer."""
-        if vpn_name in self._vpn_peers:
-            for peer in self._vpn_peers[vpn_name]:
-                if peer.ip_address == peer_ip:
-                    if peer is not None and tag in peer.tags:
-                        peer.tags.remove(tag)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""

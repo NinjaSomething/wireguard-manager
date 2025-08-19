@@ -6,7 +6,7 @@ from http import HTTPStatus
 
 from models.peer_history import PeerHistoryResponseModel
 from models.connection import ConnectionType
-from models.peers import PeerResponseModel, PeerRequestModel
+from models.peers import PeerResponseModel, PeerRequestModel, PeerUpdateRequestModel
 import logging
 from interfaces.custom_router import WgAPIRouter
 from server_manager import ConnectionException
@@ -80,7 +80,7 @@ def get_peer_by_tag(
         peer_model = PeerResponseModel(**peer.model_dump())
         peer_model.opaque = hide_secrets
         peer_models.append(peer_model)
-    return peer_models
+    return sorted(peer_models, key=lambda p: p.ip_address)
 
 
 @peer_router.get("/vpn/{vpn_name}/peer/{ip_address}/config", tags=["peers"], response_class=PlainTextResponse)
@@ -124,6 +124,27 @@ def add_peer(
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(ex))
 
     return PeerResponseModel(**peer.model_dump())
+
+
+@peer_router.put("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"], response_model=PeerResponseModel)
+def update_peer(
+    peer: PeerUpdateRequestModel,
+    vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
+    ip_address: str = Path(..., description="The IP address of the peer to update.", example="10.98.0.99"),
+) -> PeerResponseModel:
+    """Add a new peer to a VPN."""
+    vpn_manager = peer_router.vpn_manager
+    validate_vpn_exists(vpn_name, vpn_manager)
+    try:
+        vpn_manager.update_peer(vpn_name, PeerRequestModel(**peer.model_dump(), ip_address=ip_address))
+    except ConnectionException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
+    except BadRequestException as ex:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except ConflictException as ex:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(ex))
+
+    return PeerResponseModel(**peer.model_dump(), ip_address=ip_address)
 
 
 @peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"])
