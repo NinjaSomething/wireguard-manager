@@ -285,12 +285,16 @@ class DynamoDb(InMemoryDataStore):
         """
         Deduplicate history items.
         Returns a list of unique PeerHistoryDynamoModel objects.
+        Ignores peer_history_id in the comparison.
         """
 
         # Convert non-hashable dicts to hashable tuples for deduplication
         # This is necessary because lists are not hashable by default
         def make_hashable(d):
-            return tuple((k, tuple(v) if isinstance(v, list) else v) for k, v in sorted(d.items()))
+            # Exclude peer_history_id from the hashable tuple
+            return tuple(
+                (k, tuple(v) if isinstance(v, list) else v) for k, v in sorted(d.items()) if k != "peer_history_id"
+            )
 
         # Store hashable object as key, and the peer_history as value. Use key to deduplicate and convert back into the deduped list.
         unique = list({make_hashable(p.model_dump()): p for p in peers_history}.values())
