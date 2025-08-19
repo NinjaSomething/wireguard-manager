@@ -281,6 +281,27 @@ class DynamoDb(InMemoryDataStore):
             logger.exception("Unexpected error writing to DynamoDB")
             raise
 
+    def dedupe_history(self, peers_history: list[PeerHistoryDynamoModel]) -> list[PeerHistoryDynamoModel]:
+        """
+        Deduplicate history items.
+        Returns a list of unique PeerHistoryDynamoModel objects.
+        Ignores peer_history_id in the comparison.
+        """
+
+        # Convert non-hashable dicts to hashable tuples for deduplication
+        # This is necessary because lists are not hashable by default
+        def make_hashable(d):
+            # Exclude peer_history_id from the hashable tuple; Exclude vpn_name_tag and vpn_name_ip_addr as well since they're just for indexing purposes
+            return tuple(
+                (k, tuple(v) if isinstance(v, list) else v)
+                for k, v in sorted(d.items())
+                if (k != "peer_history_id" and k != "vpn_name_tag" and k != "vpn_name_ip_addr")
+            )
+
+        # Store hashable object as key, and the peer_history as value. Use key to deduplicate and convert back into the deduped list.
+        unique = list({make_hashable(p.model_dump()): p for p in peers_history}.values())
+        return unique
+
     def get_peer_history(
         self, vpn_name: str, ip_address: str, start_time: Optional[str] = None, end_time: Optional[str] = None
     ) -> list[PeerHistoryDynamoModel]:
@@ -308,7 +329,7 @@ class DynamoDb(InMemoryDataStore):
         except ValidationError as e:
             logger.error("Validation error while processing peer history items: %s", e)
             raise ValueError("Peer history items have invalid data") from e
-        return peers_history
+        return self.dedupe_history(peers_history)
 
     def get_tag_history(
         self, vpn_name: str, tag: str, start_time: Optional[str] = None, end_time: Optional[str] = None
@@ -340,6 +361,7 @@ class DynamoDb(InMemoryDataStore):
             logger.error("Validation error while processing peer tag history items: %s", e)
             raise ValueError("Peer history items have invalid data") from e
 
+        peers_tag_history = self.dedupe_history(peers_tag_history)
         grouped_peers_tag_history = {
             ip: sorted(
                 [obj for obj in peers_tag_history if obj.ip_address == ip], key=lambda x: x.timestamp, reverse=True
