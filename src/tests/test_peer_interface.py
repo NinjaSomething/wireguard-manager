@@ -1093,6 +1093,188 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         assert test_tag not in PeerHistoryResponseModel(**data[0]).tags
 
+    def test_update_peer_server_not_exist(self, test_input, mock_vpn_manager):
+        """Try updating a peer to a server that doesn't exist."""
+        # Set up Test
+        peer_router.vpn_manager = mock_vpn_manager
+        peer_config = PeerRequestModel(
+            ip_address="10.20.40.2",
+            allowed_ips=["10.20.40.0/24"],
+            public_key="PEER_PUBLIC_KEY",
+            private_key=None,
+            persistent_keepalive=25,
+            tags=["tag1"],
+        )
+
+        # -----------------------------------------
+        # Execute Test -
+        response = client.put(f"/vpn/blah/peer/{peer_config.ip_address}", data=peer_config.model_dump_json())
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
+    @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
+    def test_update_peer_server_peer_not_exist(
+        self,
+        mock_ssm_client,
+        mock_ssh_client,
+        test_input,
+        mock_ssh_command,
+        mock_ssm_command,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_peer_history_table,
+        mock_dynamo_db,
+    ):
+        """Try updating a peer that doesn't exist.  This should add the peer."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_peer_config = PeerRequestModel(
+            ip_address="10.20.40.4",
+            allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
+            public_key="PEER_PUBLIC_KEY4",
+            private_key="PEER_PRIVATE_KEY4",
+            persistent_keepalive=25,
+            tags=["tag4"],
+        )
+
+        mock_ssh_command.server = WgServerModel(
+            interface=vpn.wireguard.interface,
+            public_key=vpn.wireguard.public_key,
+            private_key=vpn.wireguard.private_key,
+            listen_port=vpn.wireguard.listen_port,
+            fw_mark="off",
+        )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_ssh_command.command
+
+        elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+            mock_ssm_client_instance = mock_ssm_client()
+            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
+
+        # Execute Test
+        response = client.put(
+            f"/vpn/{vpn.name}/peer/{expected_peer_config.ip_address}", data=expected_peer_config.model_dump_json()
+        )
+        updated_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.OK
+
+        # Validate the response hides the secrets
+        assert updated_peer.private_key != expected_peer_config.private_key
+
+        # Validate the peer was added to DynamoDB
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        dynamo_peer = PeerRequestModel(**all_peers[vpn.name][2].model_dump())
+        assert dynamo_peer == expected_peer_config
+
+        # Validate the peer was added to the mock WireGuard server
+        if vpn.connection_info is not None:
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+                peers = mock_ssh_command.peers
+            elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+                peers = mock_ssm_command.peers
+            else:
+                peers = []
+
+            found_wg_peer = False
+            for wg_peer in peers:
+                if wg_peer.wg_ip_address == expected_peer_config.ip_address:
+                    found_wg_peer = True
+                    assert wg_peer.public_key == expected_peer_config.public_key
+                    assert wg_peer.persistent_keepalive == expected_peer_config.persistent_keepalive
+                    break
+            assert found_wg_peer is True
+
+    @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
+    @patch("server_manager.ssh.paramiko.SSHClient")
+    @patch("server_manager.ssm.boto3.client")
+    def test_update_peer(
+        self,
+        mock_ssm_client,
+        mock_ssh_client,
+        test_input,
+        mock_ssh_command,
+        mock_ssm_command,
+        mock_vpn_manager,
+        mock_vpn_table,
+        mock_peer_table,
+        mock_peer_history_table,
+        mock_dynamo_db,
+    ):
+        """Update a peer.  Update the allowed IPs, public key, private key, persistent keepalive, and tags."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+        expected_peer_config = PeerRequestModel(
+            ip_address="10.20.40.2",
+            allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
+            public_key="PEER_PUBLIC_KEY_UPDATED",
+            private_key="PEER_PRIVATE_KEY_UPDATED",
+            persistent_keepalive=30,
+            tags=["tag1", "updated_tag2"],
+        )
+
+        mock_ssh_command.server = WgServerModel(
+            interface=vpn.wireguard.interface,
+            public_key=vpn.wireguard.public_key,
+            private_key=vpn.wireguard.private_key,
+            listen_port=vpn.wireguard.listen_port,
+            fw_mark="off",
+        )
+
+        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+            ssh_client = mock_ssh_client()
+            ssh_client.exec_command = mock_ssh_command.command
+
+        elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+            mock_ssm_client_instance = mock_ssm_client()
+            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
+            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
+
+        # Execute Test
+        response = client.put(
+            f"/vpn/{vpn.name}/peer/{expected_peer_config.ip_address}", data=expected_peer_config.model_dump_json()
+        )
+        updated_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.OK
+
+        # Validate the response hides the secrets
+        assert updated_peer.private_key != expected_peer_config.private_key
+
+        # Validate the peer was added to DynamoDB
+        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        dynamo_peer = PeerRequestModel(**all_peers[vpn.name][0].model_dump())
+        assert dynamo_peer == expected_peer_config
+
+        # Validate the peer was added to the mock WireGuard server
+        if vpn.connection_info is not None:
+            if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
+                peers = mock_ssh_command.peers
+            elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
+                peers = mock_ssm_command.peers
+            else:
+                peers = []
+
+            found_wg_peer = False
+            for wg_peer in peers:
+                if wg_peer.wg_ip_address == expected_peer_config.ip_address:
+                    found_wg_peer = True
+                    assert wg_peer.public_key == expected_peer_config.public_key
+                    assert wg_peer.persistent_keepalive == expected_peer_config.persistent_keepalive
+                    break
+            assert found_wg_peer is True
+
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -1112,7 +1294,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Delete a peer."""
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
-        delete_ips = ["10.20.40.2", "10.20.40.3"]
+        delete_ips = ["10.20.40.2", "10.20.40.3", "10.20.40.4"]
 
         mock_ssh_command.server = WgServerModel(
             interface=vpn.wireguard.interface,
