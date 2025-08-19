@@ -129,7 +129,7 @@ class DynamoDb(InMemoryDataStore):
             if dynamo_peer["vpn_name"] not in vpn_peers:
                 vpn_peers[dynamo_peer["vpn_name"]] = []
             vpn_peers[dynamo_peer["vpn_name"]].append(peer)
-        return vpn_peers
+        return {k: sorted(v, key=lambda p: p.ip_address) for k, v in vpn_peers.items()}
 
     def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
