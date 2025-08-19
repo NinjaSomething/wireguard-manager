@@ -292,6 +292,7 @@ class DynamoDb(InMemoryDataStore):
         def make_hashable(d):
             return tuple((k, tuple(v) if isinstance(v, list) else v) for k, v in sorted(d.items()))
 
+        # Store hashable object as key, and the peer_history as value. Use key to deduplicate and convert back into the deduped list.
         unique = list({make_hashable(p.model_dump()): p for p in peers_history}.values())
         return unique
 
