@@ -57,6 +57,16 @@ def main(
         "--environment",
         help="Use this to configure which environment the service should use. This is used to determine which database to use.",
     ),
+    ssl_keyfile: str = typer.Option(
+        None,
+        "--ssl-keyfile",
+        help="Path to your private key file for SSL",
+    ),
+    ssl_certfile: str = typer.Option(
+        None,
+        "--ssl-certfile",
+        help="Path to your SSL certificate file",
+    ),
 ):
     """
     Set network monitoring to true for all sites in environment.
@@ -80,7 +90,14 @@ def main(
         _router.vpn_manager = vpn_manager
 
     try:
-        uvicorn.run("__main__:app", host=uvicorn_host, port=uvicorn_port, log_config=None)
+        uvicorn.run(
+            "__main__:app",
+            host=uvicorn_host,
+            port=uvicorn_port,
+            log_config=None,
+            ssl_keyfile=ssl_keyfile,  # Path to your private key file
+            ssl_certfile=ssl_certfile,  # Path to your certificate file
+        )
     except SystemExit as ex:
         msg = "Service FAILED DURING STARTUP"
         log.exception(f"{msg}: {ex}")
