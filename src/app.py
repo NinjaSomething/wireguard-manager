@@ -3,7 +3,7 @@ import signal
 import uvicorn
 import logging
 import coloredlogs
-from configargparse import ArgumentParser
+import typer
 from fastapi import FastAPI, Response
 from http import HTTPStatus
 from interfaces.vpn import vpn_router
@@ -11,6 +11,9 @@ from interfaces.peers import peer_router
 from databases.dynamodb import DynamoDb
 from vpn_manager import VpnManager
 
+
+log = logging.getLogger(__name__)
+typer_app = typer.Typer()
 
 coloredlogs.install()
 app = FastAPI(
@@ -39,52 +42,52 @@ def signal_handler(signal_num, _frame):
     exit_application()
 
 
-if __name__ == "__main__":
+@typer_app.command()
+def main(
+    uvicorn_host: str = typer.Option("wg-manager", "--uvicorn-host", help="Uvicorn hostname"),
+    uvicorn_port: int = typer.Option(5000, "--uvicorn-port", help="Uvicorn port"),
+    aws_region: str = typer.Option("us-west-2", "--aws-region", help="The AWS region"),
+    dynamodb_endpoint: str = typer.Option(
+        None,
+        "--dynamodb-endpoint",
+        help="The dynamodb endpoint.  This is only used for local dev testing.  E.g. http://dynamodb-local:8000",
+    ),
+    environment: str = typer.Option(
+        ...,
+        "--environment",
+        help="Use this to configure which environment the service should use. This is used to determine which database to use.",
+    ),
+):
+    """
+    Set network monitoring to true for all sites in environment.
+    """
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler)
     signal.signal(signal.SIGABRT, signal_handler)
     signal.signal(signal.SIGQUIT, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    log = logging.getLogger(__name__)
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    app_name = __file__.split("/")[-1].split(".")[0]
 
-    carg_parser = ArgumentParser(default_config_files=["service.conf"], auto_env_var_prefix="")
-    carg_parser.add("-c", "--config-file", required=False, is_config_file=True, help="Config file path")
-    carg_parser.add("--uvicorn-host", required=False, type=str, default="wg-manager", help="Uvicorn hostname")
-    carg_parser.add("--uvicorn-port", required=False, type=int, default=5000, help="Uvicorn port")
-    carg_parser.add("--aws-region", required=False, type=str, default="us-west-2", help="The AWS region to use")
-    carg_parser.add(
-        "--dynamodb-endpoint",
-        required=False,
-        type=str,
-        default=None,
-        help="The dynamodb endpoint.  This is only used for local dev testing. E.g. http://dynamodb-local:8000",
-    )
-    carg_parser.add(
-        "--environment",
-        required=True,
-        type=str,
-        help="Use this to configure which environment the service should use",
-    )
-    config = carg_parser.parse_args()
-    log.info(f"The service is using the following config values\n{carg_parser.format_values()}")
     dynamo_db = DynamoDb(
-        environment=config.environment,
-        dynamodb_endpoint_url=config.dynamodb_endpoint,
-        aws_region=config.aws_region,
+        environment=environment,
+        dynamodb_endpoint_url=dynamodb_endpoint,
+        aws_region=aws_region,
     )
     vpn_manager = VpnManager(db_manager=dynamo_db)
 
-    for router in routers:
-        router.vpn_manager = vpn_manager
+    for _router in routers:
+        _router.vpn_manager = vpn_manager
 
     try:
-        uvicorn.run("__main__:app", host=config.uvicorn_host, port=config.uvicorn_port, log_config=None)
+        uvicorn.run("__main__:app", host=uvicorn_host, port=uvicorn_port, log_config=None)
     except SystemExit as ex:
         msg = "Service FAILED DURING STARTUP"
         log.exception(f"{msg}: {ex}")
         raise RuntimeError(msg) from ex
     finally:
         exit_application()
+
+
+if __name__ == "__main__":
+    typer_app()
