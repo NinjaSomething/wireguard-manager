@@ -24,6 +24,8 @@ class V2Loader(yaml.SafeLoader):
 
 
 V2Loader.add_constructor("!Ref", V2Loader.ignore_unknown)
+V2Loader.add_constructor("!Sub", V2Loader.ignore_unknown)
+V2Loader.add_constructor("!GetAtt", V2Loader.ignore_unknown)
 
 
 @pytest.fixture(scope="session")
