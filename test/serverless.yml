@@ -1,0 +1,85 @@
+service: wireguard-manager-auth
+frameworkVersion: "3"
+provider:
+  name: aws
+  stage: ${opt:stage}
+  region: us-west-2
+
+resources:
+  Resources:
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: WireguardManager-UserPool-${self:provider.stage}
+        AutoVerifiedAttributes:
+          - email
+        UsernameAttributes:
+          - email
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireUppercase: true
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: true
+        Schema:
+          - Name: email
+            Required: true
+            Mutable: true
+            AttributeDataType: String
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: WireguardManager-UserPoolClient-${self:provider.stage}
+        UserPoolId:
+          Ref: CognitoUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - USER_PASSWORD_AUTH
+        SupportedIdentityProviders:
+          - COGNITO
+        CallbackURLs:
+          - http://localhost:8000/oauth2-redirect
+          # TODO: Replace with production URL, maybe environment based?
+        AllowedOAuthFlows:
+          - code
+        AllowedOAuthScopes:
+          - openid
+        AllowedOAuthFlowsUserPoolClient: true
+
+    CognitoUserPoolDomain:
+      Type: AWS::Cognito::UserPoolDomain
+      Properties:
+        Domain: wireguard-manager-${self:provider.stage}
+        ManagedLoginVersion: 1
+        UserPoolId:
+          Ref: CognitoUserPool
+
+    # Resource server
+    CognitoUserPoolResourceServer:
+      Type: AWS::Cognito::UserPoolResourceServer
+      Properties:
+        Identifier: http://localhost:8000
+        Name: WireguardManagerResourceServer
+        UserPoolId:
+          Ref: CognitoUserPool
+    CognitoUserPoolGroupAdmins:
+      Type: AWS::Cognito::UserPoolGroup
+      Properties:
+        GroupName: admins
+        UserPoolId:
+          Ref: CognitoUserPool
+        Description: Administrators group for Wireguard Manager
+    CognitoUserPoolGroupUsers:
+      Type: AWS::Cognito::UserPoolGroup
+      Properties:
+        GroupName: users
+        UserPoolId:
+          Ref: CognitoUserPool
+        Description: Regular users group for Wireguard Manager
+  Outputs:
+    CognitoUserPoolId:
+      Value: !Ref CognitoUserPool
+      # Export:
+      #   Name: ${self:service}-UserPoolId
+# TODO: After this is spun up, a user needs to be created in the user pool manually and assigned to the admins group
