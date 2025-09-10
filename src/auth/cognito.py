@@ -1,10 +1,10 @@
 from fastapi import Depends
 from fastapi.security import OAuth2AuthorizationCodeBearer
 
-from auth.unauthenticated import WireguardAPI
+from auth.unauthenticated import WireguardManagerAPI
 
 
-class CognitoAuthWireguardAPI(WireguardAPI):
+class CognitoAuthWireguardManagerAPI(WireguardManagerAPI):
     """
     AWS Cognito authentication for Wireguard API.
     """

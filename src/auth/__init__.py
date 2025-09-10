@@ -1,7 +1,7 @@
 from enum import Enum
 
-from .cognito import CognitoAuthWireguardAPI
-from .unauthenticated import WireguardAPI
+from .cognito import CognitoAuthWireguardManagerAPI
+from .unauthenticated import WireguardManagerAPI
 
 
 class AuthProvider(str, Enum):

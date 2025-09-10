@@ -1,22 +1,27 @@
 import urllib.parse
 from copy import deepcopy
 from http import HTTPStatus
+from unittest.mock import MagicMock, patch
 
+import pytest
 from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-import pytest
 
-from app import app, vpn_router
+from app import setup_app_routes, vpn_router
+from auth import WireguardManagerAPI
+from models.connection import ConnectionModel, ConnectionType
 from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
-from models.vpn import VpnPutModel, WireguardModel, VpnModel
-from models.connection import ConnectionModel, ConnectionType
+from models.vpn import VpnModel, VpnPutModel, WireguardModel
 from models.wg_server import WgServerModel
 
 """
 ALL THE TESTS HERE ARE RUN SUCCESSIVELY.  IF THE FIRST TEST FAILS, THE REST WILL PROBABLY FAIL TOO.
 """
+
+app = WireguardManagerAPI()
+client = TestClient(app)
+setup_app_routes(app)
 
 client = TestClient(app)
 

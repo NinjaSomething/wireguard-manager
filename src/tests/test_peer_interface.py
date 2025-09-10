@@ -1,23 +1,26 @@
+import datetime
 import urllib.parse
 from http import HTTPStatus
-from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-import pytest
-from pydantic import SecretStr
-import datetime
+from unittest.mock import MagicMock, patch
 
-from app import app, vpn_router
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import SecretStr
+
+from app import setup_app_routes, vpn_router
+from auth import WireguardManagerAPI
+from interfaces.peers import peer_router
+from models.connection import ConnectionModel, ConnectionType
 from models.peer_history import PeerHistoryResponseModel
+from models.peers import PeerRequestModel, PeerResponseModel
 from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
-from models.vpn import VpnPutModel, WireguardModel, VpnModel
-from models.connection import ConnectionModel, ConnectionType
+from models.vpn import VpnModel, VpnPutModel, WireguardModel
 from models.wg_server import WgServerModel, WgServerPeerModel
-from models.peers import PeerRequestModel, PeerResponseModel
-from interfaces.peers import peer_router
 
-
+app = WireguardManagerAPI()
 client = TestClient(app)
+setup_app_routes(app)
 
 test_parameters = [
     VpnModel(

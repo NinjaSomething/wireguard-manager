@@ -8,7 +8,7 @@ import typer
 import uvicorn
 from fastapi import Response
 
-from auth import AuthProvider, CognitoAuthWireguardAPI, WireguardAPI
+from auth import AuthProvider, CognitoAuthWireguardManagerAPI, WireguardManagerAPI
 from databases.dynamodb import DynamoDb
 from interfaces.peers import peer_router
 from interfaces.vpn import vpn_router
@@ -20,6 +20,14 @@ log = logging.getLogger(__name__)
 coloredlogs.install()
 
 typer_app = typer.Typer()
+
+def setup_app_routes(app: WireguardManagerAPI) -> None:
+    for router in ROUTERS:
+        app.include_router(router)
+
+    # Add any root level routes here
+    app.add_api_route("/", health, methods=["GET"], tags=["wg-manager"])
+    app.add_api_route("/health", health, methods=["GET"], tags=["wg-manager"])
 
 
 def health() -> Response:
@@ -92,21 +100,15 @@ def main(
                 sys.exit(1)
             if not cognito_redirect_uri:
                 cognito_redirect_uri = f"http://{uvicorn_host}:{uvicorn_port}/oauth2-redirect"
-            app = CognitoAuthWireguardAPI(
+            app = CognitoAuthWireguardManagerAPI(
                 client_id=cognito_client_id, swagger_redirect_uri=cognito_redirect_uri, cognito_domain=cognito_domain
             )
         case AuthProvider.NONE:
             print("No authentication configured.")
-            app = WireguardAPI()
+            app = WireguardManagerAPI()
         case _:
             raise ValueError(f"Unsupported auth provider: {auth_provider}")
-
-    for router in ROUTERS:
-        app.include_router(router)
-
-    # Add any root level routes here
-    app.add_api_route("/", health, methods=["GET"], tags=["wg-manager"])
-    app.add_api_route("/health", health, methods=["GET"], tags=["wg-manager"])
+    setup_app_routes(app)
 
     dynamo_db = DynamoDb(environment=environment, dynamodb_endpoint_url=dynamodb_endpoint, aws_region=aws_region)
     vpn_manager = VpnManager(db_manager=dynamo_db)

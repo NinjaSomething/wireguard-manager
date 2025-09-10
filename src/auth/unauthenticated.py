@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 
-class WireguardAPI(FastAPI):
+class WireguardManagerAPI(FastAPI):
 
     def __init__(self, **kwargs):
         """
