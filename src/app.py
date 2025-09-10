@@ -21,6 +21,7 @@ coloredlogs.install()
 
 typer_app = typer.Typer()
 
+
 def setup_app_routes(app: WireguardManagerAPI) -> None:
     for router in ROUTERS:
         app.include_router(router)
