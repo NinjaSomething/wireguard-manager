@@ -75,7 +75,7 @@ def main(
         None,
         "--cognito-redirect-uri",
         help=(
-            "The redirect URI for Cognito Login Page, required if using Cognito authentication. "
+            "The redirect URI for Cognito Login Page. This must match the one set in the Cognito App Client settings. "
             "Defaults to http://<uvicorn-host>:<uvicorn-port>/oauth2-redirect"
         ),
     ),
