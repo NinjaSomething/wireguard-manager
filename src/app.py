@@ -47,29 +47,41 @@ def signal_handler(signal_num, _frame):
 
 @typer_app.command()
 def main(
-    uvicorn_host: str = typer.Option("wg-manager", "--uvicorn-host", help="Uvicorn hostname"),
-    uvicorn_port: int = typer.Option(5000, "--uvicorn-port", help="Uvicorn port"),
-    aws_region: str = typer.Option("us-west-2", "--aws-region", help="The AWS region"),
+    uvicorn_host: str = typer.Option("wg-manager", "--uvicorn-host", help="Uvicorn hostname", envvar="UVICORN_HOST"),
+    uvicorn_port: int = typer.Option(5000, "--uvicorn-port", help="Uvicorn port", envvar="UVICORN_PORT"),
+    aws_region: str = typer.Option("us-west-2", "--aws-region", help="The AWS region", envvar="AWS_REGION"),
     dynamodb_endpoint: str = typer.Option(
         None,
         "--dynamodb-endpoint",
         help="The dynamodb endpoint.  This is only used for local dev testing.  E.g. http://dynamodb-local:8000",
+        envvar="DYNAMODB_ENDPOINT",
     ),
     environment: str = typer.Option(
         ...,
         "--environment",
         help="Use this to configure which environment the service should use. This is used to determine which database to use.",
+        envvar="ENVIRONMENT",
     ),
-    ssl_keyfile: str = typer.Option(None, "--ssl-keyfile", help="Path to your private key file for SSL"),
-    ssl_certfile: str = typer.Option(None, "--ssl-certfile", help="Path to your SSL certificate file"),
-    auth_provider: AuthProvider = typer.Option(AuthProvider.NONE, "--auth", help="The authentication provider to use"),
+    ssl_keyfile: str = typer.Option(
+        None, "--ssl-keyfile", help="Path to your private key file for SSL", envvar="SSL_KEYFILE"
+    ),
+    ssl_certfile: str = typer.Option(
+        None, "--ssl-certfile", help="Path to your SSL certificate file", envvar="SSL_CERTFILE"
+    ),
+    auth_provider: AuthProvider = typer.Option(
+        AuthProvider.NONE, "--auth", help="The authentication provider to use", envvar="AUTH"
+    ),
     cognito_client_id: str = typer.Option(
         None,
         "--cognito-client-id",
         help="The Client ID corresponding to the app client in Cognito, required if using Cognito authentication.",
+        envvar="COGNITO_CLIENT_ID",
     ),
     cognito_domain: str = typer.Option(
-        None, "--cognito-domain", help="The Cognito domain, required if using Cognito authentication."
+        None,
+        "--cognito-domain",
+        help="The Cognito domain, required if using Cognito authentication.",
+        envvar="COGNITO_DOMAIN",
     ),
     cognito_redirect_uri: str = typer.Option(
         None,
@@ -78,6 +90,7 @@ def main(
             "The redirect URI for Cognito Login Page. This must match the one set in the Cognito App Client settings. "
             "Defaults to http://<uvicorn-host>:<uvicorn-port>/oauth2-redirect"
         ),
+        envvar="COGNITO_REDIRECT_URI",
     ),
 ):
     """
