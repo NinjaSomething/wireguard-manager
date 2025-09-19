@@ -155,7 +155,6 @@ def main(
         raise RuntimeError(msg) from ex
     finally:
         exit_application()
-    log.info("Main thread exiting")
 
 
 if __name__ == "__main__":
