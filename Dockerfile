@@ -1,5 +1,5 @@
-FROM python:3.10.4-slim as pip-packages
-ENV HDF5_DIR /usr/include/hdf5
+FROM python:3.10-slim
+ENV HDF5_DIR=/usr/include/hdf5
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_NO_CACHE_DIR=False
 
@@ -11,5 +11,4 @@ ADD . /opt/wireguard-manager/.
 EXPOSE 6000
 
 WORKDIR /opt/wireguard-manager
-ENV PYTHONPATH /opt/blah
 CMD ["python3", "-u", "/opt/wireguard-manager/src/app.py"]
