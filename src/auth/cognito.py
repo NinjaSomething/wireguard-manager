@@ -117,7 +117,7 @@ class CognitoAuthWireguardManagerAPI(WireguardManagerAPI):
             swagger_ui_init_oauth={
                 "clientId": client_id,
                 "appName": "Wireguard Manager",
-                "scopes": "openid email",
+                "scopes": "openid",
                 "usePkceWithAuthorizationCodeGrant": True,
                 "redirectUri": swagger_redirect_uri,
             },
