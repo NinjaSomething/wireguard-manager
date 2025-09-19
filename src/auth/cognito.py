@@ -128,7 +128,7 @@ class CognitoAuthWireguardManagerAPI(WireguardManagerAPI):
         """
         Fetch the JSON Web Key Set (JWKS) from the specified URL.
         """
-        log.info(f"Fetching JWKS from {jwks_url}")
+        log.debug(f"Fetching JWKS from {jwks_url}")
         try:
             with httpx.Client() as client:
                 response = client.get(jwks_url)
@@ -146,7 +146,7 @@ class CognitoAuthWireguardManagerAPI(WireguardManagerAPI):
             else:
                 raise ValueError(f"Unsupported key type/algorithm in JWKS. Type: {key['kty']}, Algorithm: {key['alg']}")
         self._key_map = key_map
-        log.info(f"Fetched {len(key_map)} keys from JWKS")
+        log.debug(f"Fetched {len(key_map)} keys from JWKS")
 
     async def _fetch_jwks_loop(self, jwks_url: str, stop_event: asyncio.Event):
         """
@@ -158,7 +158,10 @@ class CognitoAuthWireguardManagerAPI(WireguardManagerAPI):
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=JWKS_FETCH_INTERVAL)
             except asyncio.TimeoutError:
-                self._fetch_jwks(jwks_url)
+                try:
+                    self._fetch_jwks(jwks_url)
+                except Exception as e:
+                    log.exception(f"Failed to refresh JWKS: {e}")
 
     @asynccontextmanager
     async def _lifespan(self, _):
