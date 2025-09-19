@@ -89,9 +89,16 @@ class CognitoAuthWireguardManagerAPI(WireguardManagerAPI):
                 )
 
             # Verify the token signature and claims
-            decoded_token = decode(
-                token, key=issuer_public_signing_key, algorithms=SUPPORTED_JWT_ALGORITHMS, issuer=issuer_url
-            )
+            try:
+                decoded_token = decode(
+                    token, key=issuer_public_signing_key, algorithms=SUPPORTED_JWT_ALGORITHMS, issuer=issuer_url
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Invalid token: {e}",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
             token_payload = CognitoJWT(**decoded_token)
 
             # Check token expiration
