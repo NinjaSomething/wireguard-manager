@@ -33,7 +33,7 @@ class PeerRequestModel(PeerUpdateRequestModel):
     message: str = Field(..., description="The reason for updating the peer.")
 
 
-class PeerDeleteRequestModel(PeerUpdateRequestModel):
+class PeerDeleteRequestModel(BaseModel):
     message: str = Field(..., description="The reason for deleting the peer.")
 
 
