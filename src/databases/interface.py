@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import abc
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from databases.dynamodb import PeerHistoryDynamoModel
+    from models.connection import ConnectionModel
     from models.peers import PeerDbModel
     from models.vpn import VpnModel
-    from models.connection import ConnectionModel
-    from databases.dynamodb import PeerHistoryDynamoModel
 
 
 class AbstractDatabase(metaclass=abc.ABCMeta):
@@ -36,17 +37,17 @@ class AbstractDatabase(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def add_peer(self, vpn_name: str, peer: PeerDbModel):
+    def add_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
         """Add a new peer to the database.  If it already exists, raise a ValueError exception."""
         pass
 
     @abc.abstractmethod
-    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel):
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, **kwargs):
         """Update an existing peer in the database.  If the peer does not exist, raise a ValueError exception."""
         pass
 
     @abc.abstractmethod
-    def delete_peer(self, vpn_name: str, peer: PeerDbModel):
+    def delete_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
         """Remove a peer from the database."""
         pass
 

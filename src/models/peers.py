@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, SecretStr, PrivateAttr, field_serializer, field_validator
 from typing import Optional
+
+from pydantic import BaseModel, Field, PrivateAttr, SecretStr, field_serializer, field_validator
 
 
 # -----------------------------------------------------------
@@ -14,6 +15,7 @@ class PeerUpdateRequestModel(BaseModel):
     private_key: str | None = Field(None, description="The private wireguard key for the peer.")
     persistent_keepalive: int = Field(..., description="The wireguard keep-alive configuration for the peer.")
     tags: list[str] = Field(..., description="Tags associated with the wireguard peer.")
+    message: str = Field(..., description="The reason for adding the peer.")
 
     @field_validator("allowed_ips", mode="before")
     def transform_allowed_ips(cls, value: str | list[str]) -> list[str]:
@@ -28,6 +30,27 @@ class PeerRequestModel(PeerUpdateRequestModel):
         None,
         description="The wireguard IP address of the peer.  If not provided, the next available IP on the VPN will be used.",
     )
+    message: str = Field(..., description="The reason for updating the peer.")
+
+
+class PeerDeleteRequestModel(PeerUpdateRequestModel):
+    message: str = Field(..., description="The reason for deleting the peer.")
+
+
+class PeerGenerateKeysRequestModel(BaseModel):
+    message: str = Field(..., description="The reason for regenerating the peer keys.")
+
+
+class AddTagToPeerRequestModel(BaseModel):
+    message: str = Field(..., description="The reason for adding the tag to the peer.")
+
+
+class DeleteTagFromPeerRequestModel(BaseModel):
+    message: str = Field(..., description="The reason for removing the tag from the peer.")
+
+
+class ImportVpnPeersRequestModel(BaseModel):
+    message: str = Field(..., description="The reason for importing the VPN peers.")
 
 
 # -----------------------------------------------------------

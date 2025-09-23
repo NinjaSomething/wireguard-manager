@@ -1,18 +1,26 @@
+import logging
 from datetime import datetime
-
-from fastapi import Response, HTTPException, Path
-from fastapi.responses import PlainTextResponse
 from http import HTTPStatus
 
-from models.peer_history import PeerHistoryResponseModel
-from models.connection import ConnectionType
-from models.peers import PeerResponseModel, PeerRequestModel, PeerUpdateRequestModel
-import logging
-from interfaces.custom_router import WgAPIRouter
-from server_manager import ConnectionException
-from vpn_manager import VpnUpdateException, BadRequestException, ConflictException
-from interfaces.vpn import validate_vpn_exists
+from fastapi import HTTPException, Path, Request, Response
+from fastapi.responses import PlainTextResponse
 
+from interfaces.custom_router import WgAPIRouter
+from interfaces.vpn import validate_vpn_exists
+from models.connection import ConnectionType
+from models.peer_history import PeerHistoryResponseModel
+from models.peers import (
+    AddTagToPeerRequestModel,
+    DeleteTagFromPeerRequestModel,
+    ImportVpnPeersRequestModel,
+    PeerDeleteRequestModel,
+    PeerGenerateKeysRequestModel,
+    PeerRequestModel,
+    PeerResponseModel,
+    PeerUpdateRequestModel,
+)
+from server_manager import ConnectionException
+from vpn_manager import BadRequestException, ConflictException, VpnUpdateException
 
 log = logging.getLogger(__name__)
 peer_router = WgAPIRouter()
@@ -27,15 +35,13 @@ def validate_peer_exists(vpn_name: str, ip_address: str, vpn_manager) -> None:
     validate_vpn_exists(vpn_name, vpn_manager)
     if not vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address):
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"No peer with IP {ip_address} was found in VPN {vpn_name}",
+            status_code=HTTPStatus.NOT_FOUND, detail=f"No peer with IP {ip_address} was found in VPN {vpn_name}"
         )
 
 
 @peer_router.get("/vpn/{vpn_name}/peers", tags=["peers"], response_model=list[PeerResponseModel])
 def get_peers(
-    vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    hide_secrets: bool = True,
+    vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."), hide_secrets: bool = True
 ) -> list[PeerResponseModel]:
     """Get all the peers for a given VPN."""
     vpn_manager = peer_router.vpn_manager
@@ -108,6 +114,7 @@ PersistentKeepalive = {peer.persistent_keepalive}"""
 
 @peer_router.post("/vpn/{vpn_name}/peer", tags=["peers"], response_model=PeerResponseModel)
 def add_peer(
+    request: Request,
     peer: PeerRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
 ) -> PeerResponseModel:
@@ -115,7 +122,12 @@ def add_peer(
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     try:
-        vpn_manager.add_peer(vpn_name, peer)
+        vpn_manager.add_peer(
+            vpn_name,
+            peer,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message=peer.message,
+        )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
     except BadRequestException as ex:
@@ -128,6 +140,7 @@ def add_peer(
 
 @peer_router.put("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"], response_model=PeerResponseModel)
 def update_peer(
+    request: Request,
     peer: PeerUpdateRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     ip_address: str = Path(..., description="The IP address of the peer to update.", example="10.98.0.99"),
@@ -136,7 +149,12 @@ def update_peer(
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     try:
-        vpn_manager.update_peer(vpn_name, PeerRequestModel(**peer.model_dump(), ip_address=ip_address))
+        vpn_manager.update_peer(
+            vpn_name,
+            PeerRequestModel(**peer.model_dump(), ip_address=ip_address),
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message=peer.message,
+        )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
     except BadRequestException as ex:
@@ -149,6 +167,8 @@ def update_peer(
 
 @peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"])
 def delete_peer(
+    request: Request,
+    peer: PeerDeleteRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
 ) -> Response:
@@ -156,7 +176,12 @@ def delete_peer(
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
     try:
-        vpn_manager.delete_peer(vpn_name, ip_address)
+        vpn_manager.delete_peer(
+            vpn_name,
+            ip_address,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message=peer.message,
+        )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
     return Response(status_code=HTTPStatus.OK)
@@ -166,6 +191,8 @@ def delete_peer(
     "/vpn/{vpn_name}/peer/{ip_address}/generate-wireguard-keys", tags=["peers"], response_model=PeerResponseModel
 )
 def generate_new_wireguard_keys(
+    request: Request,
+    peer_generate_keys_request: PeerGenerateKeysRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
 ) -> PeerResponseModel:
@@ -174,7 +201,12 @@ def generate_new_wireguard_keys(
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
 
     try:
-        updated_peer = vpn_manager.generate_new_peer_keys(vpn_name, ip_address)
+        updated_peer = vpn_manager.generate_new_peer_keys(
+            vpn_name,
+            ip_address,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message="Generated new keys: " + peer_generate_keys_request.message,
+        )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
 
@@ -185,6 +217,8 @@ def generate_new_wireguard_keys(
 
 @peer_router.post("/vpn/{vpn_name}/import", tags=["peers"], response_model=list[PeerResponseModel])
 def import_vpn_peers(
+    request: Request,
+    import_vpn_peers_request: ImportVpnPeersRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
 ) -> list[PeerResponseModel]:
     """This imports peers from the WireGuard VPN into this service."""
@@ -194,10 +228,14 @@ def import_vpn_peers(
     if vpn.connection_info is None:
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
-            detail=f"The information required to get data from the Wireguard Server has not been configured",
+            detail="The information required to get data from the Wireguard Server has not been configured",
         )
     try:
-        added_peers = vpn_manager.import_peers(vpn_name)
+        added_peers = vpn_manager.import_peers(
+            vpn_name,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message="Importing VPN peers: " + import_vpn_peers_request.message,
+        )
     except VpnUpdateException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return [PeerResponseModel(**peer.model_dump()) for peer in added_peers]
@@ -205,6 +243,8 @@ def import_vpn_peers(
 
 @peer_router.put("/vpn/{vpn_name}/peer/{ip_address}/tag/{tag}", tags=["peers"], response_model=PeerResponseModel)
 def add_tag_to_peer(
+    request: Request,
+    add_tag_to_peer_request: AddTagToPeerRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     tag: str = Path(
@@ -214,12 +254,20 @@ def add_tag_to_peer(
     """Add a tag to a peer."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
-    vpn_manager.add_tag_to_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
+    vpn_manager.add_tag_to_peer(
+        vpn_name=vpn_name,
+        peer_ip=ip_address,
+        tag=tag,
+        changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+        message="Adding tag to peer: " + add_tag_to_peer_request.message,
+    )
     return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 
 
 @peer_router.delete("/vpn/{vpn_name}/peer/{ip_address}/tag/{tag}", tags=["peers"], response_model=PeerResponseModel)
 def delete_tag_from_peer(
+    request: Request,
+    delete_tag_from_peer_request: DeleteTagFromPeerRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
     tag: str = Path(
@@ -229,7 +277,13 @@ def delete_tag_from_peer(
     """Remove a tag from a peer."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
-    vpn_manager.delete_tag_from_peer(vpn_name=vpn_name, peer_ip=ip_address, tag=tag)
+    vpn_manager.delete_tag_from_peer(
+        vpn_name=vpn_name,
+        peer_ip=ip_address,
+        tag=tag,
+        changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+        message="Removing tag from peer: " + delete_tag_from_peer_request.message,
+    )
     return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 
 
@@ -252,10 +306,7 @@ def get_peer_history_ip_address(
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
     if start_time_ns and end_time_ns and start_time_ns > end_time_ns:
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail="Start time must be before end time.",
-        )
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Start time must be before end time.")
 
     peer_history = vpn_manager.get_peer_history(vpn_name, ip_address, start_time_ns, end_time_ns)
     if not peer_history:
@@ -293,16 +344,12 @@ def get_tag_history(
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
     if start_time_ns and end_time_ns and start_time_ns > end_time_ns:
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail="Start time must be before end time.",
-        )
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Start time must be before end time.")
 
     tag_histories = vpn_manager.get_tag_history(vpn_name, tag, start_time_ns, end_time_ns)
     if not tag_histories:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail=f"No tag_history found with tag {tag} in VPN {vpn_name}",
+            status_code=HTTPStatus.NOT_FOUND, detail=f"No tag_history found with tag {tag} in VPN {vpn_name}"
         )
 
     peer_history_responses = {}
