@@ -92,6 +92,12 @@ def main(
         ),
         envvar="COGNITO_REDIRECT_URI",
     ),
+    cognito_jwks_url: str = typer.Option(
+        None,
+        "--cognito-jwks-url",
+        help="The Token signing key URL or JSON Web Key Set (JWKS) URL for Cognito, required if using Cognito authentication.",
+        envvar="COGNITO_JWKS_URL",
+    ),
 ):
     """
     Set network monitoring to true for all sites in environment.
@@ -106,19 +112,23 @@ def main(
 
     match auth_provider:
         case AuthProvider.COGNITO:
-            print("Using Cognito authentication.")
-            if not cognito_client_id or not cognito_domain:
-                print(
-                    "ERROR: Parameters cognito_client_id and cognito_domain are required when using Cognito authentication."
+            log.info("Using Cognito authentication.")
+            if not cognito_client_id or not cognito_domain or not cognito_jwks_url:
+                log.error(
+                    "ERROR: Parameters cognito_client_id, cognito_domain, and cognito_jwks_url are required when using "
+                    "Cognito authentication."
                 )
                 sys.exit(1)
             if not cognito_redirect_uri:
                 cognito_redirect_uri = f"http://{uvicorn_host}:{uvicorn_port}/oauth2-redirect"
             app = CognitoAuthWireguardManagerAPI(
-                client_id=cognito_client_id, swagger_redirect_uri=cognito_redirect_uri, cognito_domain=cognito_domain
+                client_id=cognito_client_id,
+                swagger_redirect_uri=cognito_redirect_uri,
+                cognito_domain=cognito_domain,
+                jwks_url=cognito_jwks_url,
             )
         case AuthProvider.NONE:
-            print("No authentication configured.")
+            log.info("No authentication configured.")
             app = WireguardManagerAPI()
         case _:
             raise ValueError(f"Unsupported auth provider: {auth_provider}")
@@ -129,9 +139,8 @@ def main(
 
     for _router in ROUTERS:
         _router.vpn_manager = vpn_manager
-
     try:
-        print("Starting uvicorn")
+        log.info("Starting uvicorn")
         uvicorn.run(
             app,
             host=uvicorn_host,
