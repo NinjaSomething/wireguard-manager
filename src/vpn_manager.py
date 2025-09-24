@@ -249,7 +249,9 @@ class VpnManager:
 
         return private_key_str, public_key_str
 
-    def generate_new_peer_keys(self, vpn_name: str, ip_address: str):
+    def generate_new_peer_keys(
+        self, vpn_name: str, ip_address: str, changed_by: str = "", message: str = ""
+    ) -> PeerDbModel:
         """
         This will generate new keys for the peer and update the database.  If the connection_info is set, it will
         also remove the old peer from the wireguard server and add the peer with the new keys.
@@ -269,6 +271,8 @@ class VpnManager:
                 tags=peer.tags,
                 ip_address=peer.ip_address,
             ),
+            changed_by=changed_by,
+            message=message,
         )
         return updated_peer
 
