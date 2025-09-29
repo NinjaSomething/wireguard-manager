@@ -127,7 +127,7 @@ class VpnManager:
             raise ValueError(f"Address space [{peer_allowed_ip}] is too large. Allowed IPs must be /16 or smaller.")
         set(ipaddress.ip_network(peer_allowed_ip).hosts())
 
-    def add_peer(self, vpn_name: str, peer: PeerRequestModel, changed_by: str = "", message: str = "") -> None:
+    def add_peer(self, vpn_name: str, peer: PeerRequestModel, changed_by: str) -> None:
         """
         This will add the peer to the database.
         :param vpn_name: The name of the VPN to add the peer to.
@@ -168,15 +168,10 @@ class VpnManager:
             server_manager.add_peer(vpn, peer)
 
         self._db_manager.add_peer(
-            vpn_name=vpn_name,
-            peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())),
-            changed_by=changed_by,
-            message=message,
+            vpn_name=vpn_name, peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())), changed_by=changed_by
         )
 
-    def update_peer(
-        self, vpn_name: str, updated_peer: PeerRequestModel, changed_by: str = "", message: str = ""
-    ) -> PeerDbModel:
+    def update_peer(self, vpn_name: str, updated_peer: PeerRequestModel, changed_by: str) -> PeerDbModel:
         existing_peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=updated_peer.ip_address)
         if not existing_peer:
             self.add_peer(vpn_name, updated_peer)
@@ -194,7 +189,6 @@ class VpnManager:
                 vpn_name=vpn_name,
                 updated_peer=PeerDbModel(**updated_peer.model_dump(), peer_id=existing_peer.peer_id),
                 changed_by=changed_by,
-                message=message,
             )
         return updated_peer
 
@@ -212,7 +206,7 @@ class VpnManager:
     def get_peers_by_tag(self, vpn_name: str, tag: str) -> list[PeerDbModel]:
         return self._db_manager.get_peers_by_tag(vpn_name, tag)
 
-    def delete_peer(self, vpn_name: str, ip_address: str, changed_by: str = "", message: str = "") -> None:
+    def delete_peer(self, vpn_name: str, ip_address: str, changed_by: str, message: str) -> None:
         """
         This will remove a peer from the wireguard server and the database.  A ConnectionException will be raised if
         this fails to add the peer to the wireguard server.
@@ -249,9 +243,7 @@ class VpnManager:
 
         return private_key_str, public_key_str
 
-    def generate_new_peer_keys(
-        self, vpn_name: str, ip_address: str, changed_by: str = "", message: str = ""
-    ) -> PeerDbModel:
+    def generate_new_peer_keys(self, vpn_name: str, ip_address: str, changed_by: str, message: str) -> PeerDbModel:
         """
         This will generate new keys for the peer and update the database.  If the connection_info is set, it will
         also remove the old peer from the wireguard server and add the peer with the new keys.
@@ -270,9 +262,9 @@ class VpnManager:
                 persistent_keepalive=peer.persistent_keepalive,
                 tags=peer.tags,
                 ip_address=peer.ip_address,
+                message=message,
             ),
             changed_by=changed_by,
-            message=message,
         )
         return updated_peer
 
@@ -307,19 +299,21 @@ class VpnManager:
 
         return added_peers
 
-    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str):
+    def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str, changed_by: str, message: str):
         """Add a tag to an existing peer"""
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=peer_ip)
+        peer.message = message
         if tag not in peer.tags:
             peer.tags.append(tag)
-            self._db_manager.update_peer(vpn_name, peer)
+            self._db_manager.update_peer(vpn_name, peer, changed_by=changed_by)
 
-    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str):
+    def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str, changed_by: str, message: str):
         """Delete a tag from an existing peer"""
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=peer_ip)
+        peer.message = message
         if tag in peer.tags:
             peer.tags.remove(tag)
-            self._db_manager.update_peer(vpn_name, peer)
+            self._db_manager.update_peer(vpn_name, peer, changed_by=changed_by)
 
     def get_tag_history(
         self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None

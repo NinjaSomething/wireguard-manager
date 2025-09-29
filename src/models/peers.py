@@ -30,7 +30,6 @@ class PeerRequestModel(PeerUpdateRequestModel):
         None,
         description="The wireguard IP address of the peer.  If not provided, the next available IP on the VPN will be used.",
     )
-    message: str = Field(..., description="The reason for updating the peer.")
 
 
 class PeerDeleteRequestModel(BaseModel):

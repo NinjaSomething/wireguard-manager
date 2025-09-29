@@ -121,12 +121,10 @@ def add_peer(
     """Add a new peer to a VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
+    peer.message = f"[{request.url.path}] " + peer.message
     try:
         vpn_manager.add_peer(
-            vpn_name,
-            peer,
-            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-            message=peer.message,
+            vpn_name, peer, changed_by=request.state.user if hasattr(request.state, "user") else "unknown"
         )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
@@ -148,12 +146,12 @@ def update_peer(
     """Update an existing peer or add a new one if it does not exist."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
+    peer.message = f"[{request.url.path}] " + peer.message
     try:
         vpn_manager.update_peer(
             vpn_name,
             PeerRequestModel(**peer.model_dump(), ip_address=ip_address),
             changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-            message=peer.message,
         )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
@@ -175,6 +173,7 @@ def delete_peer(
     """Delete a peer from a VPN."""
     vpn_manager = peer_router.vpn_manager
     validate_vpn_exists(vpn_name, vpn_manager)
+    peer.message = f"[{request.url.path}] " + peer.message
     try:
         vpn_manager.delete_peer(
             vpn_name,
@@ -199,13 +198,13 @@ def generate_new_wireguard_keys(
     """Generate new WireGuard keys for a peer."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
-
+    peer_generate_keys_request.message = f"[{request.url.path}] '" + peer_generate_keys_request.message + "'"
     try:
         updated_peer = vpn_manager.generate_new_peer_keys(
             vpn_name,
             ip_address,
             changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-            message="Generated new keys: " + peer_generate_keys_request.message,
+            message=peer_generate_keys_request.message,
         )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
@@ -230,11 +229,12 @@ def import_vpn_peers(
             status_code=HTTPStatus.NOT_FOUND,
             detail="The information required to get data from the Wireguard Server has not been configured",
         )
+    import_vpn_peers_request.message = f"[{request.url.path}] " + import_vpn_peers_request.message
     try:
         added_peers = vpn_manager.import_peers(
             vpn_name,
             changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-            message="Importing VPN peers: " + import_vpn_peers_request.message,
+            message=import_vpn_peers_request.message,
         )
     except VpnUpdateException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
@@ -254,12 +254,13 @@ def add_tag_to_peer(
     """Add a tag to a peer."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
+    add_tag_to_peer_request.message = f"[{request.url.path}] " + add_tag_to_peer_request.message
     vpn_manager.add_tag_to_peer(
         vpn_name=vpn_name,
         peer_ip=ip_address,
         tag=tag,
         changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-        message="Adding tag to peer: " + add_tag_to_peer_request.message,
+        message=add_tag_to_peer_request.message,
     )
     return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 
@@ -277,12 +278,13 @@ def delete_tag_from_peer(
     """Remove a tag from a peer."""
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
+    delete_tag_from_peer_request.message = f"[{request.url.path}] " + delete_tag_from_peer_request.message
     vpn_manager.delete_tag_from_peer(
         vpn_name=vpn_name,
         peer_ip=ip_address,
         tag=tag,
         changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-        message="Removing tag from peer: " + delete_tag_from_peer_request.message,
+        message=delete_tag_from_peer_request.message,
     )
     return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 

@@ -16,6 +16,8 @@ from models.vpn import VpnModel, WireguardModel
 
 logger = logging.getLogger(__name__)
 
+UNKNOWN_USER_STRING = "[Unknown]"
+
 
 class VpnDynamoModel(BaseModel):
     name: str
@@ -55,7 +57,7 @@ class PeerHistoryDynamoModel(PeerBaseModel):
     timestamp: int
     vpn_name_ip_addr: str
     vpn_name_tag: str
-    changed_by: str = ""
+    changed_by: str = UNKNOWN_USER_STRING
     message: str = ""
 
 
@@ -124,7 +126,8 @@ class DynamoDb(InMemoryDataStore):
                 persistent_keepalive=dynamo_peer["persistent_keepalive"],
                 allowed_ips=dynamo_peer["allowed_ips"],
                 tags=dynamo_peer["tags"],
-                changed_by=dynamo_peer.get("changed_by", ""),
+                # Default these values if they don't exist in the record
+                changed_by=dynamo_peer.get("changed_by", UNKNOWN_USER_STRING),
                 message=dynamo_peer.get("message", ""),
             )
             if dynamo_peer["vpn_name"] not in vpn_peers:
@@ -167,7 +170,7 @@ class DynamoDb(InMemoryDataStore):
         # TODO: Handle failure response
         super().delete_vpn(name)  # Remove the VPN from the in-memory datastore
 
-    def add_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str, message: Optional[str] = None):
+    def add_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
         peer_dynamo = PeerDynamoModel(
             vpn_name=vpn_name,
             peer_id=peer.peer_id,
@@ -182,9 +185,9 @@ class DynamoDb(InMemoryDataStore):
         # TODO: Handle failure response
         super().add_peer(vpn_name, peer)  # Add the peer to the in-memory datastore
         # Write the peer history
-        self.write_peers_history(vpn_name, peer, changed_by=changed_by, message="Peer added: " + message)
+        self.write_peers_history(vpn_name, peer, changed_by=changed_by)
 
-    def delete_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str, message: Optional[str] = None):
+    def delete_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
         # Prevent overwriting original object, in case it's reused later
         temp_peer = deepcopy(peer)
         temp_peer.allowed_ips = ""
@@ -192,7 +195,7 @@ class DynamoDb(InMemoryDataStore):
         temp_peer.private_key = None
         temp_peer.persistent_keepalive = 0
         # Write history before deleting
-        self.write_peers_history(vpn_name, temp_peer, changed_by=changed_by, message="Peer deleted: " + message)
+        self.write_peers_history(vpn_name, temp_peer, changed_by=changed_by)
 
         # Delete the peer from the DynamoDB table
         self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
@@ -200,7 +203,7 @@ class DynamoDb(InMemoryDataStore):
         # Remove the peer from the in-memory datastore
         super().delete_peer(vpn_name, peer)
 
-    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, changed_by: str, message: Optional[str] = None):
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, changed_by: str):
         """Update an existing peer."""
         # Update the peer in the DynamoDB table
         self.peer_table.update_item(
@@ -220,7 +223,7 @@ class DynamoDb(InMemoryDataStore):
         super().update_peer(vpn_name, updated_peer)
 
         # Write the peer history
-        self.write_peers_history(vpn_name, updated_peer, changed_by=changed_by, message="Peer updated: " + message)
+        self.write_peers_history(vpn_name, updated_peer, changed_by=changed_by)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
@@ -353,7 +356,7 @@ class DynamoDb(InMemoryDataStore):
 
         return grouped_peers_tag_history
 
-    def write_peers_history(self, vpn_name: str, peer: PeerDbModel, changed_by: str, message: Optional[str] = None):
+    def write_peers_history(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
         """
         Write the peer history to the peer history table. Flatten the tags into individual entries.
         If the peer has no tags, write a single entry with an empty tag.
@@ -374,6 +377,6 @@ class DynamoDb(InMemoryDataStore):
                 vpn_name_tag=f"{vpn_name}#{tag}",
                 tags=peer.tags,
                 changed_by=changed_by,
-                message=message,
+                message=peer.message,
             )
             self.write_peer_history_db(peer_history)
