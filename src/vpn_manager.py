@@ -212,12 +212,13 @@ class VpnManager:
         this fails to add the peer to the wireguard server.
         """
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
+        peer.message = message
         if peer is not None:
             vpn = self.get_vpn(vpn_name)
             if vpn.connection_info is not None:
                 server_manager = server_manager_factory(vpn.connection_info.type)
                 server_manager.remove_peer(vpn, peer)
-            self._db_manager.delete_peer(vpn_name, peer, changed_by=changed_by, message=message)
+            self._db_manager.delete_peer(vpn_name, peer, changed_by=changed_by)
 
     @staticmethod
     def generate_wireguard_keys() -> tuple[str, str]:
