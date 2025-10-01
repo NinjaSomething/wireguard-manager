@@ -41,7 +41,7 @@ def get_all_vpns(request: Request, hide_secrets: bool = True) -> list[VpnRespons
 def add_vpn(
     vpn: VpnPutModel,
     name: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
     description: Optional[str] = "",
 ) -> Response:
@@ -66,7 +66,7 @@ def add_vpn(
 def update_connection(
     connection_info: ConnectionModel,
     name: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
 ) -> list[PeerResponseModel]:
     """
@@ -118,7 +118,7 @@ def delete_vpn(name: str) -> Response:
 @vpn_router.get("/vpn/{name}", tags=["vpn"], response_model=VpnResponseModel)
 def get_vpn(
     name: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
     hide_secrets: bool = True,
 ) -> VpnResponseModel:
