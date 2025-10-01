@@ -1,9 +1,10 @@
-import pytest
-from fastapi import HTTPException
 from datetime import datetime
 from http import HTTPStatus
 
-from interfaces.peers import get_tag_history, get_peer_history_ip_address
+import pytest
+from fastapi import HTTPException
+
+from interfaces.peers import get_peer_history_ip_address, get_tag_history
 from models.peer_history import PeerHistoryResponseModel
 
 
@@ -57,6 +58,8 @@ def test_get_tag_history_success(patch_router_vpn_manager):
                         persistent_keepalive=25,
                         tags=["tag1"],
                         timestamp=123,
+                        changed_by="user1",
+                        message="Sample message 1",
                     )
                 ],
                 "5.6.7.8": [
@@ -68,6 +71,8 @@ def test_get_tag_history_success(patch_router_vpn_manager):
                         persistent_keepalive=25,
                         tags=["tag1"],
                         timestamp=456,
+                        changed_by="user2",
+                        message="Sample message 2",
                     )
                 ],
             }
@@ -84,6 +89,8 @@ def test_get_tag_history_success(patch_router_vpn_manager):
             assert hasattr(item, "persistent_keepalive")
             assert hasattr(item, "tags")
             assert hasattr(item, "timestamp")
+            assert hasattr(item, "changed_by")
+            assert hasattr(item, "message")
             assert item.opaque is True
             # Assert that each returned tag is correct
             assert "tag1" in item.tags
@@ -102,6 +109,8 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
                         persistent_keepalive=25,
                         tags=["tag1", "tag2"],
                         timestamp=123,
+                        changed_by="user1",
+                        message="Sample message 1",
                     ),
                     DummyHistory(
                         ip_address="1.2.3.4",
@@ -111,6 +120,8 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
                         persistent_keepalive=25,
                         tags=["tag2"],
                         timestamp=124,
+                        changed_by="user2",
+                        message="Sample message 2",
                     ),
                 ],
                 "5.6.7.8": [
@@ -122,6 +133,8 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
                         persistent_keepalive=25,
                         tags=["tag2"],
                         timestamp=456,
+                        changed_by="user3",
+                        message="Sample message 3",
                     )
                 ],
             }
@@ -138,6 +151,8 @@ def test_get_tag_history_multiple_tags(patch_router_vpn_manager):
             assert hasattr(item, "persistent_keepalive")
             assert hasattr(item, "tags")
             assert hasattr(item, "timestamp")
+            assert hasattr(item, "changed_by")
+            assert hasattr(item, "message")
             assert item.opaque is True
             # Assert that each returned tag is correct for tag2
             assert "tag2" in item.tags
@@ -171,6 +186,8 @@ def test_get_peer_history_ip_address_success(patch_router_vpn_manager):
                     persistent_keepalive=25,
                     tags=["tag1"],
                     timestamp=123,
+                    changed_by="user1",
+                    message="Sample message 1",
                 )
             ]
         )
@@ -186,6 +203,8 @@ def test_get_peer_history_ip_address_success(patch_router_vpn_manager):
     assert hasattr(item, "persistent_keepalive")
     assert hasattr(item, "tags")
     assert hasattr(item, "timestamp")
+    assert hasattr(item, "changed_by")
+    assert hasattr(item, "message")
     assert item.opaque is True
 
 
