@@ -57,7 +57,7 @@ def get_peers(
 @peer_router.get("/vpn/{vpn_name}/peer/{ip_address}", tags=["peers"], response_model=PeerResponseModel)
 def get_peer(
     vpn_name: str = Path(..., description="The name of the VPN the peers are connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
     hide_secrets: bool = True,
 ) -> PeerResponseModel:
     """Return the peer with the given IP address on a given VPN."""
@@ -73,7 +73,7 @@ def get_peer(
 def get_peer_by_tag(
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     tag: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the tag name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the tag name."
     ),
     hide_secrets: bool = True,
 ) -> list[PeerResponseModel]:
@@ -92,7 +92,7 @@ def get_peer_by_tag(
 @peer_router.get("/vpn/{vpn_name}/peer/{ip_address}/config", tags=["peers"], response_class=PlainTextResponse)
 def get_peer_wg_config(
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
 ):
     """Return the wireguard configuration for a peer on a given VPN."""
     vpn_manager = peer_router.vpn_manager
@@ -141,7 +141,7 @@ def update_peer(
     request: Request,
     peer: PeerUpdateRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., description="The IP address of the peer to update.", example="10.98.0.99"),
+    ip_address: str = Path(..., description="The IP address of the peer to update.", examples="10.98.0.99"),
 ) -> PeerResponseModel:
     """Update an existing peer or add a new one if it does not exist."""
     vpn_manager = peer_router.vpn_manager
@@ -168,7 +168,7 @@ def delete_peer(
     request: Request,
     peer: PeerDeleteRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
 ) -> Response:
     """Delete a peer from a VPN."""
     vpn_manager = peer_router.vpn_manager
@@ -193,7 +193,7 @@ def generate_new_wireguard_keys(
     request: Request,
     peer_generate_keys_request: PeerGenerateKeysRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
 ) -> PeerResponseModel:
     """Generate new WireGuard keys for a peer."""
     vpn_manager = peer_router.vpn_manager
@@ -248,9 +248,9 @@ def add_tag_to_peer(
     request: Request,
     add_tag_to_peer_request: AddTagToPeerRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
     tag: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
 ) -> PeerResponseModel:
     """Add a tag to a peer."""
@@ -272,9 +272,9 @@ def delete_tag_from_peer(
     request: Request,
     delete_tag_from_peer_request: DeleteTagFromPeerRequestModel,
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
     tag: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
 ) -> PeerResponseModel:
     """Remove a tag from a peer."""
@@ -298,7 +298,7 @@ def delete_tag_from_peer(
 )
 def get_peer_history_ip_address(
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
-    ip_address: str = Path(..., regex=ipv4_regex, description="Must be a valid IPv4 address", example="192.180.0.1"),
+    ip_address: str = Path(..., pattern=ipv4_regex, description="Must be a valid IPv4 address", examples="192.180.0.1"),
     start_time: datetime = None,
     end_time: datetime = None,
     hide_secrets: bool = True,
@@ -334,7 +334,7 @@ def get_peer_history_ip_address(
 def get_tag_history(
     vpn_name: str = Path(..., description="The name of the VPN the peer is connected to."),
     tag: str = Path(
-        ..., regex="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
+        ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
     ),
     start_time: datetime = None,
     end_time: datetime = None,
