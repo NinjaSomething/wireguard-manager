@@ -265,7 +265,7 @@ class VpnManager:
                 ip_address=peer.ip_address,
                 message=message,
             ),
-            changed_by=changed_by,
+            changed_by,
         )
         return updated_peer
 

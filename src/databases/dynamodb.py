@@ -185,7 +185,7 @@ class DynamoDb(InMemoryDataStore):
         # TODO: Handle failure response
         super().add_peer(vpn_name, peer)  # Add the peer to the in-memory datastore
         # Write the peer history
-        self.write_peers_history(vpn_name, peer, changed_by=changed_by)
+        self.write_peers_history(vpn_name, peer, changed_by)
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
         # Prevent overwriting original object, in case it's reused later
@@ -195,7 +195,7 @@ class DynamoDb(InMemoryDataStore):
         temp_peer.private_key = None
         temp_peer.persistent_keepalive = 0
         # Write history before deleting
-        self.write_peers_history(vpn_name, temp_peer, changed_by=changed_by)
+        self.write_peers_history(vpn_name, temp_peer, changed_by)
 
         # Delete the peer from the DynamoDB table
         self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
@@ -223,7 +223,7 @@ class DynamoDb(InMemoryDataStore):
         super().update_peer(vpn_name, updated_peer)
 
         # Write the peer history
-        self.write_peers_history(vpn_name, updated_peer, changed_by=changed_by)
+        self.write_peers_history(vpn_name, updated_peer, changed_by)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
