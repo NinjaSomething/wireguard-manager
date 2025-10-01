@@ -39,6 +39,7 @@ def get_all_vpns(request: Request, hide_secrets: bool = True) -> list[VpnRespons
 
 @vpn_router.put("/vpn/{name}", tags=["vpn"])
 def add_vpn(
+    request: Request,
     vpn: VpnPutModel,
     name: str = Path(
         ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
@@ -50,7 +51,13 @@ def add_vpn(
     """
     vpn_manager = vpn_router.vpn_manager
     try:
-        vpn_manager.add_vpn(name, description, vpn)
+        vpn_manager.add_vpn(
+            name,
+            description,
+            vpn,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message=f"[{request.method} {request.url.path}] Added VPN {name}",
+        )
     except ValueError as ex:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=f"Failed to add VPN {name}: {ex}")
     except KeyError as ex:
@@ -64,6 +71,7 @@ def add_vpn(
 
 @vpn_router.put("/vpn/{name}/connection-info", tags=["vpn"])
 def update_connection(
+    request: Request,
     connection_info: ConnectionModel,
     name: str = Path(
         ..., pattern="^[A-Za-z0-9_-]+$", description="Only alphanumeric characters and - _ are allowed in the VPN name."
@@ -81,7 +89,11 @@ def update_connection(
     try:
         connection_info = build_wireguard_connection_model(connection_info.model_dump())
         vpn_manager.update_connection_info(name, connection_info)
-        added_peers = vpn_manager.import_peers(name)
+        added_peers = vpn_manager.import_peers(
+            name,
+            request.state.user if hasattr(request.state, "user") else "unknown",
+            f"[{request.method} {request.url.path}] Importing peers from WireGuard server",
+        )
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConnectionException as ex:

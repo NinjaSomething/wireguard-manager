@@ -40,7 +40,7 @@ class VpnManager:
     def __init__(self, db_manager: AbstractDatabase):
         self._db_manager = db_manager
 
-    def add_vpn(self, name: str, description: str, vpn_request: VpnPutModel):
+    def add_vpn(self, name: str, description: str, vpn_request: VpnPutModel, changed_by: str, message: str) -> None:
         _vpn = self.get_vpn(name)
         if _vpn is not None:
             raise ValueError(f"VPN with name {name} already exists.")
@@ -70,7 +70,7 @@ class VpnManager:
 
         #  Keep the manager aligned with the wireguard server.  Import existing peers.
         if _vpn.connection_info:
-            self.import_peers(name)
+            self.import_peers(name, changed_by, message)
 
     def get_all_vpn(self) -> list[VpnModel]:
         return [_vpn for _vpn in self._db_manager.get_all_vpn().values()]
@@ -174,7 +174,7 @@ class VpnManager:
     def update_peer(self, vpn_name: str, updated_peer: PeerRequestModel, changed_by: str) -> PeerDbModel:
         existing_peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=updated_peer.ip_address)
         if not existing_peer:
-            self.add_peer(vpn_name, updated_peer)
+            self.add_peer(vpn_name, updated_peer, changed_by)
         else:
             if (
                 existing_peer.public_key != updated_peer.public_key
@@ -212,8 +212,8 @@ class VpnManager:
         this fails to add the peer to the wireguard server.
         """
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address)
-        peer.message = message
         if peer is not None:
+            peer.message = message
             vpn = self.get_vpn(vpn_name)
             if vpn.connection_info is not None:
                 server_manager = server_manager_factory(vpn.connection_info.type)
@@ -269,7 +269,7 @@ class VpnManager:
         )
         return updated_peer
 
-    def import_peers(self, vpn_name: str) -> list[PeerRequestModel]:
+    def import_peers(self, vpn_name: str, changed_by: str, message: str) -> list[PeerRequestModel]:
         """This downloads the wireguard server peers and imports any that don't already exist."""
         _vpn = self.get_vpn(vpn_name)
         server_manager = server_manager_factory(_vpn.connection_info.type)
@@ -286,6 +286,7 @@ class VpnManager:
                 persistent_keepalive=peer.persistent_keepalive,
                 allowed_ips=[_vpn.wireguard.ip_network],
                 tags=["imported"],
+                message=message,
             )
             # Check if the peer already exists in the VPN
             skip_peer = False
@@ -295,7 +296,7 @@ class VpnManager:
                     skip_peer = True
 
             if not skip_peer:
-                self.add_peer(vpn_name, import_peer)
+                self.add_peer(vpn_name, import_peer, changed_by)
                 added_peers.append(import_peer)
 
         return added_peers
@@ -306,7 +307,7 @@ class VpnManager:
         peer.message = message
         if tag not in peer.tags:
             peer.tags.append(tag)
-            self._db_manager.update_peer(vpn_name, peer, changed_by=changed_by)
+            self._db_manager.update_peer(vpn_name, peer, changed_by)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str, changed_by: str, message: str):
         """Delete a tag from an existing peer"""
@@ -314,7 +315,7 @@ class VpnManager:
         peer.message = message
         if tag in peer.tags:
             peer.tags.remove(tag)
-            self._db_manager.update_peer(vpn_name, peer, changed_by=changed_by)
+            self._db_manager.update_peer(vpn_name, peer, changed_by)
 
     def get_tag_history(
         self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None
