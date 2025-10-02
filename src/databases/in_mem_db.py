@@ -71,7 +71,7 @@ class InMemoryDataStore(AbstractDatabase):
         self._vpn_peers[vpn_name].append(updated_peer)
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
-        if vpn_name in self._vpn_networks:
+        if vpn_name in self._vpn_peers:
             for in_memory_peer in self._vpn_peers[vpn_name]:
                 if in_memory_peer.ip_address == peer.ip_address:
                     self._vpn_peers[vpn_name].remove(in_memory_peer)
