@@ -73,6 +73,28 @@ test_parameters = [
 ]
 
 
+def compare_peer_request_and_response(request: PeerRequestModel, response: PeerResponseModel, hide_secrets: bool):
+    """
+    Compare a PeerRequestModel to a PeerResponseModel to ensure they
+    match the overlapping fields.
+    """
+    assert isinstance(request, PeerRequestModel)
+    assert isinstance(response, PeerResponseModel)
+
+    assert request.ip_address == response.ip_address
+    assert request.allowed_ips == response.allowed_ips
+    assert request.public_key == response.public_key
+    if request.private_key is not None:
+        if hide_secrets:
+            assert response.private_key == SecretStr("**********")
+        else:
+            assert request.private_key == response.private_key.get_secret_value()
+    else:
+        assert response.private_key is None
+    assert request.persistent_keepalive == response.persistent_keepalive
+    assert request.tags == response.tags
+
+
 @pytest.mark.parametrize("test_input", test_parameters, scope="class")
 class TestPeerInterface:
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
@@ -94,10 +116,7 @@ class TestPeerInterface:
         # Set up Test
         peer_router.vpn_manager = mock_vpn_manager
         vpn = test_input
-        vpn_config = VpnPutModel(
-            wireguard=vpn.wireguard,
-            connection_info=vpn.connection_info,
-        )
+        vpn_config = VpnPutModel(wireguard=vpn.wireguard, connection_info=vpn.connection_info)
         vpn_router.vpn_manager = mock_vpn_manager
         if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
             mock_ssh_client_instance = mock_ssh_client()
@@ -128,11 +147,12 @@ class TestPeerInterface:
             private_key=None,
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         # -----------------------------------------
         # Execute Test -
-        response = client.post(f"/vpn/blah/peer", data=peer_config.model_dump_json())
+        response = client.post("/vpn/blah/peer", data=peer_config.model_dump_json())
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -149,6 +169,7 @@ class TestPeerInterface:
             private_key=None,
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         # Execute Test
@@ -184,6 +205,7 @@ class TestPeerInterface:
             private_key="PEER_PRIVATE_KEY",
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         mock_ssh_command.server = WgServerModel(
@@ -206,13 +228,15 @@ class TestPeerInterface:
         # Execute Test
         response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
         actual_peer = PeerResponseModel(**response.json())
+        compare_peer_request_and_response(peer_config, actual_peer, hide_secrets=True)
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
 
         # Validate the peer was added to DynamoDB
         all_peers = mock_dynamo_db._get_all_peers_from_server()
-        assert PeerRequestModel(**all_peers[vpn.name][0].model_dump()) == peer_config
+        peer_from_db = PeerResponseModel(**all_peers[vpn.name][0].model_dump())
+        compare_peer_request_and_response(peer_config, peer_from_db, hide_secrets=False)
 
         # Validate the peer was added to the mock WireGuard server
         if vpn.connection_info is not None:
@@ -244,6 +268,7 @@ class TestPeerInterface:
             private_key=None,
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         # Execute Test
@@ -264,6 +289,7 @@ class TestPeerInterface:
             private_key=None,
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         # Execute Test
@@ -324,7 +350,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.get(f"/vpn/blah/peers")
+        response = client.get("/vpn/blah/peers")
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -335,7 +361,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.get(f"/vpn/blah/peer/10.20.40.2")
+        response = client.get("/vpn/blah/peer/10.20.40.2")
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -397,7 +423,7 @@ class TestPeerInterface:
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.get(f"/vpn/blah/peer/10.20.40.2/config")
+        response = client.get("/vpn/blah/peer/10.20.40.2/config")
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -425,6 +451,7 @@ class TestPeerInterface:
             private_key="PEER_PRIVATE_KEY",
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         expected_config = f"""[Interface]
@@ -450,7 +477,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.post(f"/vpn/blah/peer/10.20.40.2/generate-wireguard-keys")
+        response = client.post("/vpn/blah/peer/10.20.40.2/generate-wireguard-keys", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -461,7 +488,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.post(f"/vpn/{test_input.name}/peer/10.20.40.23/generate-wireguard-keys")
+        response = client.post(
+            f"/vpn/{test_input.name}/peer/10.20.40.23/generate-wireguard-keys", json={"message": "Sample message"}
+        )
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -513,7 +542,10 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
 
         # Execute Test
-        response = client.post(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/generate-wireguard-keys")
+        response = client.post(
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/generate-wireguard-keys",
+            json={"message": "Sample message"},
+        )
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate Results
@@ -562,6 +594,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
             persistent_keepalive=25,
             tags=["tag1", "tag2"],
+            message="Sample message",
         )
 
         mock_ssh_command.server = WgServerModel(
@@ -616,7 +649,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.put(f"/vpn/blah/peer/10.20.40.2/tag/tag4")
+        response = client.put("/vpn/blah/peer/10.20.40.2/tag/tag4", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -627,7 +660,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.put(f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag4")
+        response = client.put(f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag4", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -648,7 +681,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         )
 
         # Execute Test
-        response = client.put(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        response = client.put(
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}", json={"message": "Sample message"}
+        )
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate Results
@@ -676,7 +711,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         )
 
         # Execute Test
-        response = client.put(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        response = client.put(
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}", json={"message": "Sample message"}
+        )
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate Results
@@ -688,7 +725,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.delete(f"/vpn/blah/peer/10.20.40.2/tag/tag1")
+        response = client.request("DELETE", "/vpn/blah/peer/10.20.40.2/tag/tag1", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -699,7 +736,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.delete(f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag1")
+        response = client.request(
+            "DELETE", f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag1", json={"message": "Sample message"}
+        )
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -720,7 +759,11 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         )
 
         # Execute Test
-        response = client.delete(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        response = client.request(
+            "DELETE",
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}",
+            json={"message": "Sample message"},
+        )
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate Results
@@ -748,7 +791,11 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         )
 
         # Execute Test
-        response = client.delete(f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}")
+        response = client.request(
+            "DELETE",
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}",
+            json={"message": "Sample message"},
+        )
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate Results
@@ -760,7 +807,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.get(f"/vpn/blah/peer/tag/tag1")
+        response = client.get("/vpn/blah/peer/tag/tag1")
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -833,7 +880,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.post(f"/vpn/blah/import")
+        response = client.post("/vpn/blah/import", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -865,6 +912,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             private_key=None,
             persistent_keepalive=25,
             tags=["imported"],
+            message="Sample message",
         )
         wg_peer = WgServerPeerModel(
             wg_ip_address=expected_peer.ip_address,
@@ -902,7 +950,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                 mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
 
         # Execute Test
-        response = client.post(f"/vpn/{vpn.name}/import")
+        response = client.post(f"/vpn/{vpn.name}/import", json={"message": "Sample message"})
 
         # Validate Results
         if vpn.connection_info is None:
@@ -916,7 +964,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             for db_peer in all_peers[vpn.name]:
                 if db_peer.ip_address == expected_peer.ip_address:
                     found_db_peer = True
-                    assert PeerRequestModel(**db_peer.model_dump()) == expected_peer
+                    compare_peer_request_and_response(
+                        expected_peer, PeerResponseModel(**db_peer.model_dump()), hide_secrets=False
+                    )
                     break
             assert found_db_peer is True
 
@@ -937,7 +987,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                     break
             assert found_wg_peer is True
 
-            del_response = client.delete(f"/vpn/{test_input.name}/peer/10.20.40.4")
+            del_response = client.request(
+                "DELETE", f"/vpn/{test_input.name}/peer/10.20.40.4", json={"message": "Sample message"}
+            )
             assert del_response.status_code == HTTPStatus.OK
 
     def test_delete_peer_no_vpn(self, test_input, mock_vpn_manager):
@@ -946,7 +998,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.delete(f"/vpn/blah/peer/10.20.40.2")
+        response = client.request("DELETE", "/vpn/blah/peer/10.20.40.2", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
@@ -957,19 +1009,15 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.delete(f"/vpn/{test_input.name}/peer/10.20.40.23")
+        response = client.request(
+            "DELETE", f"/vpn/{test_input.name}/peer/10.20.40.23", json={"message": "Sample message"}
+        )
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
 
     def test_peer_history_invalid_time(
-        self,
-        test_input,
-        mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_peer_history_table, mock_dynamo_db
     ):
         """Test peer history endpoint with invalid start/end time."""
         vpn = test_input
@@ -979,8 +1027,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         start = now
         end = now - datetime.timedelta(hours=1)
         response = client.get(
-            f"/vpn/{vpn.name}/peer/{ip}/history",
-            params={"start_time": start.isoformat(), "end_time": end.isoformat()},
+            f"/vpn/{vpn.name}/peer/{ip}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
         )
         assert response.status_code == 400
         assert "Start time must be before end time" in response.text
@@ -994,8 +1041,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         start = now
         end = now - datetime.timedelta(hours=1)
         response = client.get(
-            f"/vpn/{vpn.name}/tag/{tag}/history",
-            params={"start_time": start.isoformat(), "end_time": end.isoformat()},
+            f"/vpn/{vpn.name}/tag/{tag}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
         )
         assert response.status_code == 400
         assert "Start time must be before end time" in response.text
@@ -1087,7 +1133,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         test_ip_address = "10.20.40.2"
 
         # Execute Test
-        client.delete(f"/vpn/{vpn.name}/peer/{test_ip_address}/tag/{test_tag}")
+        client.request(
+            "DELETE", f"/vpn/{vpn.name}/peer/{test_ip_address}/tag/{test_tag}", json={"message": "Sample message"}
+        )
 
         # Validate Results
         response = client.get(f"/vpn/{vpn.name}/peer/{test_ip_address}/history")
@@ -1107,6 +1155,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             private_key=None,
             persistent_keepalive=25,
             tags=["tag1"],
+            message="Sample message",
         )
 
         # -----------------------------------------
@@ -1143,6 +1192,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             private_key="PEER_PRIVATE_KEY4",
             persistent_keepalive=25,
             tags=["tag4"],
+            message="Sample message",
         )
 
         mock_ssh_command.server = WgServerModel(
@@ -1170,14 +1220,12 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-
-        # Validate the response hides the secrets
-        assert updated_peer.private_key != expected_peer_config.private_key
+        compare_peer_request_and_response(expected_peer_config, updated_peer, hide_secrets=True)
 
         # Validate the peer was added to DynamoDB
         all_peers = mock_dynamo_db._get_all_peers_from_server()
-        dynamo_peer = PeerRequestModel(**all_peers[vpn.name][2].model_dump())
-        assert dynamo_peer == expected_peer_config
+        dynamo_peer = PeerResponseModel(**all_peers[vpn.name][2].model_dump())
+        compare_peer_request_and_response(expected_peer_config, dynamo_peer, hide_secrets=False)
 
         # Validate the peer was added to the mock WireGuard server
         if vpn.connection_info is not None:
@@ -1224,6 +1272,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             private_key="PEER_PRIVATE_KEY_UPDATED",
             persistent_keepalive=30,
             tags=["tag1", "updated_tag2"],
+            message="Sample message",
         )
 
         mock_ssh_command.server = WgServerModel(
@@ -1251,14 +1300,12 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-
-        # Validate the response hides the secrets
-        assert updated_peer.private_key != expected_peer_config.private_key
+        compare_peer_request_and_response(expected_peer_config, updated_peer, hide_secrets=True)
 
         # Validate the peer was added to DynamoDB
         all_peers = mock_dynamo_db._get_all_peers_from_server()
-        dynamo_peer = PeerRequestModel(**all_peers[vpn.name][0].model_dump())
-        assert dynamo_peer == expected_peer_config
+        dynamo_peer = PeerResponseModel(**all_peers[vpn.name][0].model_dump())
+        compare_peer_request_and_response(expected_peer_config, dynamo_peer, hide_secrets=False)
 
         # Validate the peer was added to the mock WireGuard server
         if vpn.connection_info is not None:
@@ -1318,7 +1365,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         for delete_ip in delete_ips:
             # Execute Test
-            response = client.delete(f"/vpn/{vpn.name}/peer/{delete_ip}")
+            response = client.request("DELETE", f"/vpn/{vpn.name}/peer/{delete_ip}", json={"message": "Sample message"})
 
             # Validate Results
             assert response.status_code == HTTPStatus.OK
@@ -1363,7 +1410,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test - Delete the VPN server
-        response = client.delete(f"/vpn/{vpn.name}")
+        response = client.request("DELETE", f"/vpn/{vpn.name}", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
@@ -1372,7 +1419,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # ---------------------------------------------------
         # Execute Test - Verify this is idempotent
-        response = client.delete(f"/vpn/{vpn.name}")
+        response = client.request("DELETE", f"/vpn/{vpn.name}", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK

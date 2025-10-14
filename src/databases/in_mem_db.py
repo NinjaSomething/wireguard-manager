@@ -1,9 +1,10 @@
 import abc
 from copy import deepcopy
+
 from databases.interface import AbstractDatabase
-from models.vpn import VpnModel
-from models.peers import PeerDbModel
 from models.connection import ConnectionModel
+from models.peers import PeerDbModel
+from models.vpn import VpnModel
 
 
 class InMemoryDataStore(AbstractDatabase):
@@ -56,23 +57,25 @@ class InMemoryDataStore(AbstractDatabase):
         if name in self._vpn_networks:
             del self._vpn_networks[name]
 
-    def add_peer(self, vpn_name: str, peer: PeerDbModel):
+    def add_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
         """Add a new peer to the database."""
         if peer in self._vpn_peers[vpn_name]:
             raise ValueError("Duplicate peer")
         self._vpn_peers[vpn_name].append(peer)
 
-    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel):
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, **kwargs):
         """Update an existing peer in the database."""
         old_peer = self.get_peer(vpn_name, updated_peer.ip_address)
         if old_peer is not None:
             self._vpn_peers[vpn_name].remove(old_peer)
         self._vpn_peers[vpn_name].append(updated_peer)
 
-    def delete_peer(self, vpn_name: str, peer: PeerDbModel):
+    def delete_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
         if vpn_name in self._vpn_peers:
-            if peer in self._vpn_peers[vpn_name]:
-                self._vpn_peers[vpn_name].remove(peer)
+            for in_memory_peer in self._vpn_peers[vpn_name]:
+                if in_memory_peer.ip_address == peer.ip_address:
+                    self._vpn_peers[vpn_name].remove(in_memory_peer)
+                    return
 
     def get_peers(self, vpn_name: str) -> list[PeerDbModel]:
         """Return a list of peers for a given VPN network."""
