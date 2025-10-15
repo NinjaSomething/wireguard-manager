@@ -72,7 +72,9 @@ def extract_wg_server_config(wg_interface, wg_config: list[str]) -> Optional[WgS
             latest_handshake=int(latest_handshake),
             transfer_rx=int(transfer_rx),
             transfer_tx=int(transfer_tx),
-            persistent_keepalive=int(persistent_keepalive),
+            persistent_keepalive=(
+                int(persistent_keepalive) if str(persistent_keepalive).strip().lower() not in {"", "off"} else 0
+            ),
         )
         vpn_model.peers.append(peer)
 
