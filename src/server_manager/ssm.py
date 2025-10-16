@@ -75,7 +75,7 @@ class SsmConnection(AbstractServerManager):
             if "--output truncated--" not in output:
                 return True, output
             else:
-                return False, "SSM command output was too long and was truncated."
+                return False, "SSM command output exceeded 24,000 character limit and was truncated."
         else:
             return False, inv.get("StandardErrorContent", "")
 
