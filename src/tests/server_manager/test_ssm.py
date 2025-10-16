@@ -25,12 +25,14 @@ def connection_info():
 
 def test_remote_ssm_command_success(mocker, connection_info):
     # Patch boto3.client to return a MagicMock SSM client
+    output = "line1\nline2"
     mock_ssm = MagicMock()
     mocker.patch("server_manager.ssm.boto3.client", return_value=mock_ssm)
     mock_ssm.send_command.return_value = {"Command": {"CommandId": "cmd-123"}}
-    mock_ssm.get_command_invocation.return_value = {"Status": "Success", "StandardOutputContent": "line1\nline2"}
-    result = SsmConnection._remote_ssm_command("echo test", connection_info)
-    assert result == ["line1", "line2"]
+    mock_ssm.get_command_invocation.return_value = {"Status": "Success", "StandardOutputContent": output}
+    success, result = SsmConnection._remote_ssm_command("echo test", connection_info)
+    assert result == output
+    assert success is True
 
 
 def test_remote_ssm_command_failure(mocker, connection_info):
@@ -40,13 +42,14 @@ def test_remote_ssm_command_failure(mocker, connection_info):
     error_response = {"Error": {"Code": "AccessDeniedException", "Message": "Not allowed"}}
     operation_name = "SendCommand"
     mock_ssm.send_command.side_effect = ClientError(error_response, operation_name)
-    result = SsmConnection._remote_ssm_command("echo test", connection_info)
+    success, result = SsmConnection._remote_ssm_command("echo test", connection_info)
     assert "SSM connection failed" in result
+    assert success is False
 
 
 def test_dump_interface_config_success(mocker, connection_info):
     # Patch _remote_ssm_command and extract_wg_server_config
-    mocker.patch("server_manager.ssm.SsmConnection._remote_ssm_command", return_value=["config line"])
+    mocker.patch("server_manager.ssm.SsmConnection._remote_ssm_command", return_value=(True, "config line"))
     mock_extract = mocker.patch(
         "server_manager.ssm.extract_wg_server_config", return_value=MagicMock(spec=WgServerModel)
     )
@@ -58,7 +61,7 @@ def test_dump_interface_config_success(mocker, connection_info):
 
 def test_dump_interface_config_error(mocker, connection_info):
     # Patch _remote_ssm_command to return an error string
-    mocker.patch("server_manager.ssm.SsmConnection._remote_ssm_command", return_value="error")
+    mocker.patch("server_manager.ssm.SsmConnection._remote_ssm_command", return_value=(False, "error"))
     ssm = SsmConnection()
     result = ssm.dump_interface_config("wg0", connection_info)
     assert result == "error"

@@ -16,13 +16,14 @@ log = logging.getLogger(__name__)
 
 class SshConnection(AbstractServerManager):
     @staticmethod
-    def _remote_ssh_command(cmd: str, connection_info: ConnectionModel) -> Union[List[str], str]:
+    def _remote_ssh_command(cmd: str, connection_info: ConnectionModel) -> tuple[bool, Union[List[str], str]]:
         """
         Remotely execute SSH command
         :return
         If successful, a list of strings.  Each item is a line of the stdout.
         If unsuccessful, a message.
         """
+        success = True
         ssh_connection_info = connection_info.data
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -49,18 +50,28 @@ class SshConnection(AbstractServerManager):
                 for line in ssh_stderr.readlines():
                     msg += line
                 result = msg
+                success = False
             ssh.close()
         except paramiko.SSHException as ex:
             result = f"Failed to SSH into server: {ex}"
-        return result
+            success = False
+        return success, result
+
+    def test_interface_config(self, wg_interface: str, connection_info: ConnectionModel) -> tuple[bool, str]:
+        cmd_to_execute = f"sudo wg show {wg_interface} public-key"
+        success, test_response = SshConnection._remote_ssh_command(cmd_to_execute, connection_info)
+        if success:
+            return True, ""
+        else:
+            return False, "Failed to connect to instance via SSM"
 
     def dump_interface_config(
         self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
         """Return the full VPN config.  If this returns a string, it is an error message."""
         cmd_to_execute = f"sudo wg show {wg_interface} dump"
-        wg_dump_response = SshConnection._remote_ssh_command(cmd_to_execute, connection_info)
-        if isinstance(wg_dump_response, list):
+        success, wg_dump_response = SshConnection._remote_ssh_command(cmd_to_execute, connection_info)
+        if success:
             result = extract_wg_server_config(wg_interface, wg_dump_response)
         else:
             result = wg_dump_response

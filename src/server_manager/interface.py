@@ -14,6 +14,11 @@ class AbstractServerManager(metaclass=abc.ABCMeta):
     """This is an interface that abstracts away the functionality required to manage the wireguard server itself"""
 
     @abc.abstractmethod
+    def test_interface_config(self, wg_interface: str, connection_info: ConnectionModel) -> tuple[bool, str]:
+        """This will test communication with the VPN server.  Returns (True, "") if the connection is good."""
+        pass
+
+    @abc.abstractmethod
     def dump_interface_config(
         self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:

@@ -47,14 +47,13 @@ class MockCommand:
           public-key, preshared-key, endpoint, allowed-ips, latest-handshake, transfer-rx, transfer-tx,
           persistent-keepalive.
         """
-        return_value = [
-            f"{self._server.private_key.get_secret_value()}\t{self._server.public_key}\t{self._server.listen_port}\t{self._server.fw_mark}"
-        ]
+        return_value = f"{self._server.private_key.get_secret_value()}\t{self._server.public_key}\t{self._server.listen_port}\t{self._server.fw_mark}\n"
         for peer in self._peers:
-            return_value.append(
-                f"{peer.public_key}\t{peer.preshared_key or '(none)'}\t{peer.endpoint or '(none)'}\t{peer.wg_ip_address}\t{peer.latest_handshake}\t{peer.transfer_rx}\t{peer.transfer_tx}\t{peer.persistent_keepalive}"
-            )
+            return_value += f"{peer.public_key}\t{peer.preshared_key or '(none)'}\t{peer.endpoint or '(none)'}\t{peer.wg_ip_address}\t{peer.latest_handshake}\t{peer.transfer_rx}\t{peer.transfer_tx}\t{peer.persistent_keepalive}\n"
         return return_value
+
+    def _show_public_key(self):
+        return self._server.public_key
 
     def _add_peer(self, command: str):
         """

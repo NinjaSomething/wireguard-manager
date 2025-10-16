@@ -8,7 +8,7 @@ import logging
 from server_manager import ConnectionException, extract_wg_server_config
 from server_manager.interface import AbstractServerManager
 import time
-from typing import List, Union
+from typing import Union
 
 import boto3
 from botocore.config import Config
@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 class SsmConnection(AbstractServerManager):
     @staticmethod
-    def _remote_ssm_command(cmd: str, connection_info: ConnectionModel) -> Union[List[str], str]:
+    def _remote_ssm_command(cmd: str, connection_info: ConnectionModel) -> tuple[bool, str]:
         """
         Run a single shell command on an EC2 instance via SSM.
         Returns stdout as a list of lines on success, or stderr as a string on error.
@@ -50,9 +50,9 @@ class SsmConnection(AbstractServerManager):
             )
             cmd_id = resp["Command"]["CommandId"]
         except ClientError as e:
-            return f"SSM connection failed: {e}"
+            return False, f"SSM connection failed: {e}"
         except Exception as e:
-            return f"SSM connection failed: {e}"
+            return False, f"SSM connection failed: {e}"
 
         # poll until the command finishes
         while True:
@@ -65,23 +65,36 @@ class SsmConnection(AbstractServerManager):
                     break
             except ClientError as e:
                 if not e.response["Error"]["Code"] == "InvocationDoesNotExist":
-                    return f"SSM get_command_invocation failed: {e}"
+                    return False, f"SSM get_command_invocation failed: {e}"
             time.sleep(1)
 
         # return output or error
         if status == "Success":
-            return inv.get("StandardOutputContent", "").splitlines()
+            output = inv.get("StandardOutputContent", "")
+            if "--output truncated--" not in output:
+                return True, output
+            else:
+                return False, "SSM command output was too long and was truncated."
         else:
-            return inv.get("StandardErrorContent", "")
+            return False, inv.get("StandardErrorContent", "")
+
+    def test_interface_config(self, wg_interface: str, connection_info: ConnectionModel) -> tuple[bool, str]:
+        cmd_to_execute = f"sudo wg show {wg_interface} public-key"
+        success, _ = SsmConnection._remote_ssm_command(cmd_to_execute, connection_info)
+        if success:
+            return True, ""
+        else:
+            return False, "Failed to connect to instance via SSM"
 
     def dump_interface_config(
         self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:
         """Return the full VPN config.  If this returns a string, it is an error message."""
         cmd_to_execute = f"sudo wg show {wg_interface} dump"
-        wg_dump_response = SsmConnection._remote_ssm_command(cmd_to_execute, connection_info)
-        if isinstance(wg_dump_response, list):
-            result = extract_wg_server_config(wg_interface, wg_dump_response)
+        success, wg_dump_response = SsmConnection._remote_ssm_command(cmd_to_execute, connection_info)
+        if success:
+            wg_dump_list = wg_dump_response.splitlines()
+            result = extract_wg_server_config(wg_interface, wg_dump_list)
         else:
             result = wg_dump_response
         return result
