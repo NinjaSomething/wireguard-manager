@@ -15,7 +15,11 @@ class AbstractServerManager(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def test_interface_config(self, wg_interface: str, connection_info: ConnectionModel) -> tuple[bool, str]:
-        """This will test communication with the VPN server.  Returns (True, "") if the connection is good."""
+        """
+        This will test communication with the VPN server.
+        Returns (True, "") if the connection is good.
+        Returns (False, Error Message) if the connection is bad.
+        """
         pass
 
     @abc.abstractmethod

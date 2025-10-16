@@ -23,7 +23,8 @@ class SsmConnection(AbstractServerManager):
     def _remote_ssm_command(cmd: str, connection_info: ConnectionModel) -> tuple[bool, str]:
         """
         Run a single shell command on an EC2 instance via SSM.
-        Returns stdout as a list of lines on success, or stderr as a string on error.
+        If successful, (True, a string of the stdout).
+        If unsuccessful, (False, the stderr message).
         """
         # build AWS credentials and client
         try:

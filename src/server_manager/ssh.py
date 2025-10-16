@@ -20,8 +20,8 @@ class SshConnection(AbstractServerManager):
         """
         Remotely execute SSH command
         :return
-        If successful, a list of strings.  Each item is a line of the stdout.
-        If unsuccessful, a message.
+        If successful, (True, a list of strings).  Each item is a line of the stdout.
+        If unsuccessful, (False, a message).
         """
         success = True
         ssh_connection_info = connection_info.data
