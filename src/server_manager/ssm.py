@@ -8,7 +8,7 @@ import logging
 from server_manager import ConnectionException, extract_wg_server_config
 from server_manager.interface import AbstractServerManager
 import time
-from typing import List, Union
+from typing import Union
 
 import boto3
 from botocore.config import Config
@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 class SsmConnection(AbstractServerManager):
     @staticmethod
-    def _remote_ssm_command(cmd: str, connection_info: ConnectionModel) -> Union[List[str], str]:
+    def _remote_ssm_command(cmd: str, connection_info: ConnectionModel) -> Union[list[str], str]:
         """
         Run a single shell command on an EC2 instance via SSM.
         Returns stdout as a list of lines on success, or stderr as a string on error.
@@ -70,9 +70,22 @@ class SsmConnection(AbstractServerManager):
 
         # return output or error
         if status == "Success":
-            return inv.get("StandardOutputContent", "").splitlines()
+            output = inv.get("StandardOutputContent", "")
+            if "--output truncated--" not in output:
+                return output.splitlines()
+            else:
+                return "SSM command output exceeded 24,000 character limit and was truncated."
+
         else:
             return inv.get("StandardErrorContent", "")
+
+    def test_interface_config(self, wg_interface: str, connection_info: ConnectionModel) -> tuple[bool, str]:
+        cmd_to_execute = f"sudo wg show {wg_interface} public-key"
+        wg_dump_response = SsmConnection._remote_ssm_command(cmd_to_execute, connection_info)
+        if isinstance(wg_dump_response, list):
+            return True, ""
+        else:
+            return False, f"Failed to connect to instance via SSM: {wg_dump_response}"
 
     def dump_interface_config(
         self, wg_interface: str, connection_info: ConnectionModel

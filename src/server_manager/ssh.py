@@ -54,6 +54,14 @@ class SshConnection(AbstractServerManager):
             result = f"Failed to SSH into server: {ex}"
         return result
 
+    def test_interface_config(self, wg_interface: str, connection_info: ConnectionModel) -> tuple[bool, str]:
+        cmd_to_execute = f"sudo wg show {wg_interface} public-key"
+        wg_dump_response = SshConnection._remote_ssh_command(cmd_to_execute, connection_info)
+        if isinstance(wg_dump_response, list):
+            return True, ""
+        else:
+            return False, f"Failed to connect to instance via SSM: {wg_dump_response}"
+
     def dump_interface_config(
         self, wg_interface: str, connection_info: ConnectionModel
     ) -> Union[Optional[WgServerModel], str]:

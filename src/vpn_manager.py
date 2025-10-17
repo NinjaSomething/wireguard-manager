@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from databases.dynamodb import PeerHistoryDynamoModel
 from databases.interface import AbstractDatabase
-from models.connection import ConnectionModel
+from models.connection import ConnectionModel, ConnectionType
 from models.peers import PeerDbModel, PeerRequestModel
 from models.vpn import VpnModel, VpnPutModel
 from server_manager import server_manager_factory
@@ -54,10 +54,10 @@ class VpnManager:
         # Validate the connection info works
         if vpn_request.connection_info is not None:
             server_manager = server_manager_factory(vpn_request.connection_info.type)
-            wg_config_data = server_manager.dump_interface_config(
+            success, wg_config_data = server_manager.test_interface_config(
                 vpn_request.wireguard.interface, vpn_request.connection_info
             )
-            if isinstance(wg_config_data, str):
+            if not success:
                 raise KeyError(f"SSH information for VPN {name} failed: {wg_config_data}")
 
         _vpn = VpnModel(**vpn_request.model_dump(), name=name, description=description)
@@ -68,8 +68,9 @@ class VpnManager:
             )
         self._db_manager.add_vpn(_vpn)
 
-        #  Keep the manager aligned with the wireguard server.  Import existing peers.
-        if _vpn.connection_info:
+        # Keep the manager aligned with the wireguard server.  Import existing peers.
+        # Don't automate peer import for SSM until issue #104 is resolved.
+        if _vpn.connection_info and _vpn.connection_info.type is not ConnectionType.SSM:
             self.import_peers(name, changed_by, message)
 
     def get_all_vpn(self) -> list[VpnModel]:
@@ -88,8 +89,8 @@ class VpnManager:
         if connection_info is not None:
             _vpn = self.get_vpn(vpn_name)
             server_manager = server_manager_factory(connection_info.type)
-            wg_config_data = server_manager.dump_interface_config(_vpn.wireguard.interface, connection_info)
-            if isinstance(wg_config_data, str):
+            success, wg_config_data = server_manager.test_interface_config(_vpn.wireguard.interface, connection_info)
+            if not success:
                 raise KeyError(f"SSH information for VPN {vpn_name} failed: {wg_config_data}")
         self._db_manager.update_connection_info(vpn_name, connection_info)
 

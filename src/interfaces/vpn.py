@@ -64,6 +64,8 @@ def add_vpn(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except VpnUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     except Exception as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return Response(status_code=HTTPStatus.OK)
