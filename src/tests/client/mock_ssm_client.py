@@ -24,10 +24,19 @@ class MockSsmCommand(MockCommand):
 
     def command(self, CommandId: str, InstanceId=str, PluginName=str):
         return_dict = {}
-        if f"wg show " in self.cmd and "dump" in self.cmd:
-            dump_dict = parse.parse("sudo wg show {wg_interface} dump", self.cmd)
+        if f"wg show " in self.cmd:
+            if "dump" in self.cmd:
+                dump_dict = parse.parse("sudo wg show {wg_interface} dump", self.cmd)
+            elif "public-key" in self.cmd:
+                dump_dict = parse.parse("sudo wg show {wg_interface} public-key", self.cmd)
+            else:
+                raise Exception(f"Unknown wg show command: {self.cmd}")
+
             if dump_dict["wg_interface"] == self._server.interface:
-                self.standard_output_content.splitlines.return_value = self._dump()
+                if "dump" in self.cmd:
+                    self.standard_output_content.splitlines.return_value = self._dump()
+                else:
+                    self.standard_output_content.splitlines.return_value = self._show_public_key()
                 return_dict["StandardOutputContent"] = self.standard_output_content
                 return_dict["Status"] = "Success"
             else:

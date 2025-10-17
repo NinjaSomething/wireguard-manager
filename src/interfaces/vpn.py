@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException, Path, Request, Response
 
 from interfaces.custom_router import WgAPIRouter
-from models.connection import ConnectionModel, build_wireguard_connection_model
+from models.connection import ConnectionModel, build_wireguard_connection_model, ConnectionType
 from models.peers import PeerResponseModel
 from models.vpn import VpnPutModel, VpnResponseModel
 from server_manager import ConnectionException
@@ -64,6 +64,8 @@ def add_vpn(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
+    except VpnUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     except Exception as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return Response(status_code=HTTPStatus.OK)
@@ -89,11 +91,15 @@ def update_connection(
     try:
         connection_info = build_wireguard_connection_model(connection_info.model_dump())
         vpn_manager.update_connection_info(name, connection_info)
-        added_peers = vpn_manager.import_peers(
-            name,
-            request.state.user if hasattr(request.state, "user") else "unknown",
-            f"[{request.method} {request.url.path}] Importing peers from WireGuard server",
-        )
+        if connection_info.type != ConnectionType.SSM:
+            added_peers = vpn_manager.import_peers(
+                name,
+                request.state.user if hasattr(request.state, "user") else "unknown",
+                f"[{request.method} {request.url.path}] Importing peers from WireGuard server",
+            )
+        else:
+            log.warning("Importing of peers is not supported for SSM connections.  Import skipped.")
+            added_peers = []
     except KeyError as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConnectionException as ex:

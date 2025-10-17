@@ -20,10 +20,19 @@ class MockSshCommand(MockCommand):
 
     def command(self, command, bufsize=-1, timeout=None, get_pty=False, environment=None):
         self.stdout.channel.recv_exit_status.return_value = 0
-        if f"wg show " in command and "dump" in command:
-            dump_dict = parse.parse("sudo wg show {wg_interface} dump", command)
+        if f"wg show " in command:
+            if "dump" in command:
+                dump_dict = parse.parse("sudo wg show {wg_interface} dump", command)
+            elif "public-key" in command:
+                dump_dict = parse.parse("sudo wg show {wg_interface} public-key", command)
+            else:
+                raise Exception(f"Unknown wg show command: {command}.")
+
             if dump_dict["wg_interface"] == self._server.interface:
-                self.stdout.readlines.return_value = self._dump()
+                if "dump" in command:
+                    self.stdout.readlines.return_value = self._dump()
+                elif "public-key" in command:
+                    self.stdout.readlines.return_value = self._show_public_key()
             else:
                 # This simulates trying to dump an interface that does not exist.
                 self.stderr.readlines.return_value = ["Error: Interface not found"]

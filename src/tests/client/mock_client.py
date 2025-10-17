@@ -37,7 +37,7 @@ class MockCommand:
     def inject_peer(self, peer: WgServerPeerModel):
         self._peers.append(peer)
 
-    def _dump(self):
+    def _dump(self) -> list[str]:
         """
         The following defines the dump format:
         Several lines are returned; the first contains in order separated by tab:
@@ -55,6 +55,9 @@ class MockCommand:
                 f"{peer.public_key}\t{peer.preshared_key or '(none)'}\t{peer.endpoint or '(none)'}\t{peer.wg_ip_address}\t{peer.latest_handshake}\t{peer.transfer_rx}\t{peer.transfer_tx}\t{peer.persistent_keepalive}"
             )
         return return_value
+
+    def _show_public_key(self) -> list[str]:
+        return [self._server.public_key]
 
     def _add_peer(self, command: str):
         """

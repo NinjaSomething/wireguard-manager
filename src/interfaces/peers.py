@@ -239,7 +239,7 @@ def import_vpn_peers(
             message=import_vpn_peers_request.message,
         )
     except VpnUpdateException as ex:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex) + " Aborting import.")
     return [PeerResponseModel(**peer.model_dump()) for peer in added_peers]
 
 
