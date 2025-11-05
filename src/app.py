@@ -3,7 +3,6 @@ import signal
 import sys
 from http import HTTPStatus
 
-import coloredlogs
 import typer
 import uvicorn
 from fastapi import Response
@@ -17,7 +16,7 @@ from vpn_manager import VpnManager
 ROUTERS = [vpn_router, peer_router]
 
 log = logging.getLogger(__name__)
-coloredlogs.install()
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
 typer_app = typer.Typer()
 
@@ -107,8 +106,6 @@ def main(
     signal.signal(signal.SIGABRT, signal_handler)
     signal.signal(signal.SIGQUIT, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
     match auth_provider:
         case AuthProvider.COGNITO:

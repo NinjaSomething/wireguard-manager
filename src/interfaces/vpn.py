@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException, Path, Request, Response
 
 from interfaces.custom_router import WgAPIRouter
-from models.connection import ConnectionModel, build_wireguard_connection_model, ConnectionType
+from models.connection import ConnectionModel, ConnectionType, build_wireguard_connection_model
 from models.peers import PeerResponseModel
 from models.vpn import VpnPutModel, VpnResponseModel
 from server_manager import ConnectionException
@@ -27,7 +27,6 @@ def validate_vpn_exists(name: str, vpn_manager) -> None:
 @vpn_router.get("/vpn", tags=["vpn"], response_model=list[VpnResponseModel])
 def get_all_vpns(request: Request, hide_secrets: bool = True) -> list[VpnResponseModel]:
     """Get all the VPN servers managed by this service."""
-    log.info("Received request from user '%s' at IP %s", request.state.user, request.client.host)
     vpn_manager = vpn_router.vpn_manager
     vpn_models = []
     for vpn in vpn_manager.get_all_vpn():
