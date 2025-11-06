@@ -154,7 +154,7 @@ def update_peer(
             changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
         )
     except ConnectionException as ex:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     except BadRequestException as ex:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConflictException as ex:
