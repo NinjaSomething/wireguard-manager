@@ -1,17 +1,21 @@
+from __future__ import annotations
 import codecs
 import ipaddress
 import logging
+import typing
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
-from databases.dynamodb import PeerHistoryDynamoModel
 from databases.interface import AbstractDatabase
 from models.connection import ConnectionModel, ConnectionType
 from models.peers import PeerDbModel, PeerRequestModel
 from models.vpn import VpnModel, VpnPutModel
 from server_manager import server_manager_factory
+
+if typing.TYPE_CHECKING:
+    from databases.dynamodb import PeerHistoryDynamoModel
 
 log = logging.getLogger(__name__)
 
@@ -177,10 +181,12 @@ class VpnManager:
         if not existing_peer:
             self.add_peer(vpn_name, updated_peer, changed_by)
         else:
-            if (
-                existing_peer.public_key != updated_peer.public_key
-                or existing_peer.private_key != updated_peer.private_key
-            ):
+            if updated_peer.public_key is None:
+                updated_peer.private_key, updated_peer.public_key = self.generate_wireguard_keys()
+            elif updated_peer.private_key is None:
+                updated_peer.private_key = existing_peer.private_key
+
+            if existing_peer.public_key != updated_peer.public_key:
                 vpn = self.get_vpn(vpn_name)
                 if vpn.connection_info is not None:
                     server_manager = server_manager_factory(vpn.connection_info.type)
