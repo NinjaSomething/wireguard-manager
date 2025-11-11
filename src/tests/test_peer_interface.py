@@ -1,22 +1,24 @@
 import datetime
-import urllib.parse
 from http import HTTPStatus
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from models.peers import PeerDbModel
 
+from vpn_manager import VpnManager
 from app import setup_app_routes, vpn_router
 from auth import WireguardManagerAPI
 from interfaces.peers import peer_router
 from models.connection import ConnectionModel, ConnectionType
-from models.peer_history import PeerHistoryResponseModel
 from models.peers import PeerRequestModel, PeerResponseModel
 from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
-from models.vpn import VpnModel, VpnPutModel, WireguardModel
+from models.vpn import VpnModel, WireguardModel
 from models.wg_server import WgServerModel, WgServerPeerModel
+from tests.helper import compare_peer_request_and_response, add_peer, seed_history, add_vpn
+
 
 app = WireguardManagerAPI()
 client = TestClient(app)
@@ -73,71 +75,16 @@ test_parameters = [
 ]
 
 
-def compare_peer_request_and_response(request: PeerRequestModel, response: PeerResponseModel, hide_secrets: bool):
-    """
-    Compare a PeerRequestModel to a PeerResponseModel to ensure they
-    match the overlapping fields.
-    """
-    assert isinstance(request, PeerRequestModel)
-    assert isinstance(response, PeerResponseModel)
-
-    assert request.ip_address == response.ip_address
-    assert request.allowed_ips == response.allowed_ips
-    assert request.public_key == response.public_key
-    if request.private_key is not None:
-        if hide_secrets:
-            assert response.private_key == SecretStr("**********")
-        else:
-            assert request.private_key == response.private_key.get_secret_value()
-    else:
-        assert response.private_key is None
-    assert request.persistent_keepalive == response.persistent_keepalive
-    assert request.tags == response.tags
+@pytest.fixture(scope="function")
+def mock_vpn_manager(mock_dynamodb):
+    return VpnManager(db_manager=mock_dynamodb)
 
 
-@pytest.mark.parametrize("test_input", test_parameters, scope="class")
 class TestPeerInterface:
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
-    @patch("server_manager.ssh.paramiko.SSHClient")
-    @patch("server_manager.ssm.boto3.client")
-    def test_add_server_successfully(
-        self,
-        mock_ssm_client,
-        mock_ssh_client,
-        mock_ssm_command,
-        mock_ssh_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_vpn_manager,
-        mock_dynamo_db,
-        test_input,
-    ):
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-        vpn = test_input
-        vpn_config = VpnPutModel(wireguard=vpn.wireguard, connection_info=vpn.connection_info)
-        vpn_router.vpn_manager = mock_vpn_manager
-        if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
-            mock_ssh_client_instance = mock_ssh_client()
-            mock_ssh_client_instance.exec_command = mock_ssh_command.command
-
-        elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
-            mock_ssm_client_instance = mock_ssm_client()
-            mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
-            mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
-
-        # Execute Test
-        url = f"/vpn/{vpn.name}?{urllib.parse.urlencode(dict(description=vpn.description))}"
-        response = client.put(url, data=vpn_config.model_dump_json())
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
-        assert all_vpns == [vpn]
-
-    def test_add_peer_server_not_exist(self, test_input, mock_vpn_manager):
-        """Try adding a peer to a server that doesn't exist."""
+    def test_add_peer_server_not_exist(self, mock_vpn_manager, test_input):
+        """Try adding a peer to a vpn that doesn't exist."""
         # Set up Test
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
@@ -157,10 +104,14 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_add_peer_server_invalid_ip_network(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_peer_server_invalid_ip_network(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try adding a peer to a server using an IP in a different subnet."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.41.2",
@@ -178,6 +129,7 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.BAD_REQUEST
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -185,28 +137,17 @@ class TestPeerInterface:
         self,
         mock_ssm_client,
         mock_ssh_client,
-        test_input,
-        mock_ssh_command,
         mock_ssm_command,
+        mock_ssh_command,
+        mock_dynamodb,
         mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        test_input,
     ):
         """Try adding a peer successfully."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        peer_config = PeerRequestModel(
-            ip_address="10.20.40.2",
-            allowed_ips=["10.20.40.0/24"],
-            public_key="PEER_PUBLIC_KEY",
-            private_key="PEER_PRIVATE_KEY",
-            persistent_keepalive=25,
-            tags=["tag1"],
-            message="Sample message",
-        )
 
         mock_ssh_command.server = WgServerModel(
             interface=vpn.wireguard.interface,
@@ -219,11 +160,20 @@ class TestPeerInterface:
         if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH:
             ssh_client = mock_ssh_client()
             ssh_client.exec_command = mock_ssh_command.command
-
         elif vpn.connection_info and vpn.connection_info.type == ConnectionType.SSM:
             mock_ssm_client_instance = mock_ssm_client()
             mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
             mock_ssm_client_instance.get_command_invocation = mock_ssm_command.command
+
+        peer_config = PeerRequestModel(
+            ip_address="10.20.40.2",
+            allowed_ips=["10.20.40.0/24"],
+            public_key="PEER_PUBLIC_KEY",
+            private_key="PEER_PRIVATE_KEY",
+            persistent_keepalive=25,
+            tags=["tag1"],
+            message="Sample message",
+        )
 
         # Execute Test
         response = client.post(f"/vpn/{vpn.name}/peer", data=peer_config.model_dump_json())
@@ -234,7 +184,7 @@ class TestPeerInterface:
         assert response.status_code == HTTPStatus.OK
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        all_peers = mock_dynamodb._get_all_peers_from_server()
         peer_from_db = PeerResponseModel(**all_peers[vpn.name][0].model_dump())
         compare_peer_request_and_response(peer_config, peer_from_db, hide_secrets=False)
 
@@ -256,11 +206,19 @@ class TestPeerInterface:
                     break
             assert found_wg_peer is True
 
-    def test_add_peer_server_invalid_ip(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_peer_server_invalid_ip(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try adding peer using an existing IP address"""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
+
         peer_config = PeerRequestModel(
             ip_address="10.20.40.2",
             allowed_ips=["10.20.40.0/24"],
@@ -277,11 +235,19 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
 
-    def test_add_peer_server_invalid_public_key(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_peer_server_invalid_public_key(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try adding peer using an existing public key"""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
+
         peer_config = PeerRequestModel(
             ip_address="10.20.40.3",
             allowed_ips=["10.20.40.0/24"],
@@ -298,11 +264,19 @@ class TestPeerInterface:
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
 
-    def test_get_all_peers_hide_secrets(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_all_peers_hide_secrets(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try getting all peers."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
+
         expected_peers = [
             PeerResponseModel(
                 ip_address="10.20.40.2",
@@ -321,11 +295,19 @@ class TestPeerInterface:
         assert response.status_code == HTTPStatus.OK
         assert [PeerResponseModel(**peer) for peer in response.json()] == expected_peers
 
-    def test_get_all_peers_no_hide_secrets(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_all_peers_no_hide_secrets(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try getting all peers.  Don't hide the secrets"""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
+
         expected_peers = [
             PeerResponseModel(
                 ip_address="10.20.40.2",
@@ -344,43 +326,57 @@ class TestPeerInterface:
         assert response.status_code == HTTPStatus.OK
         assert [PeerResponseModel(**peer) for peer in response.json()] == expected_peers
 
-    def test_get_all_peers_no_vpn(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_all_peers_no_vpn(self, mock_vpn_manager, test_input):
         """Try getting all peers but the VPN server doesn't exist."""
         # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.get("/vpn/blah/peers")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_get_peer_no_vpn(self, test_input, mock_vpn_manager):
-        """Try to get a peer but the VPN server doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.get("/vpn/blah/peer/10.20.40.2")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_get_peer_not_exist(self, test_input, mock_vpn_manager):
-        """Try to get a peer but the peer doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.get(f"/vpn/{test_input.name}/peer/10.20.40.3")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_get_peer(self, test_input, mock_vpn_manager):
-        """Try getting a peer.  Don't hide the secrets."""
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.get(f"/vpn/{vpn.name}/peers")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_no_vpn(self, mock_vpn_manager, test_input):
+        """Try to get a peer but the VPN server doesn't exist."""
+        # Set up Test
+        vpn = test_input
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.get(f"/vpn/{vpn.name}/peer/10.20.40.2")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_not_exist(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Try to get a peer but the peer doesn't exist."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.get(f"/vpn/{vpn.name}/peer/10.20.40.3")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Try getting a peer.  Don't hide the secrets."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
+
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
             allowed_ips=["10.20.40.0/24"],
@@ -397,10 +393,19 @@ class TestPeerInterface:
         assert response.status_code == HTTPStatus.OK
         assert PeerResponseModel(**response.json()) == expected_peer
 
-    def test_get_peer_hide_secrets(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_hide_secrets(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try getting a peer but hide the secrets."""
+        # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
+
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
             allowed_ips=["10.20.40.0/24"],
@@ -417,32 +422,44 @@ class TestPeerInterface:
         assert response.status_code == HTTPStatus.OK
         assert PeerResponseModel(**response.json()) == expected_peer
 
-    def test_get_peer_config_no_vpn(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_config_no_vpn(self, mock_vpn_manager, test_input):
         """Try to get a peer config but the VPN server doesn't exist."""
         # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.get("/vpn/blah/peer/10.20.40.2/config")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_get_peer_config_not_exist(self, test_input, mock_vpn_manager):
-        """Try to get a peer config but the peer doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.get(f"/vpn/{test_input.name}/peer/10.20.40.3/config")
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_get_peer_config(self, test_input, mock_vpn_manager):
-        """Try getting a peer config."""
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.get(f"/vpn/{vpn.name}/peer/10.20.40.2/config")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_config_not_exist(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
+        """Try to get a peer config but the peer doesn't exist."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.get(f"/vpn/{vpn.name}/peer/10.20.40.3/config")
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_config(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Try getting a peer config."""
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Inject existing peer
+        add_peer(vpn, mock_dynamodb)
 
         expected_peer = PeerRequestModel(
             ip_address="10.20.40.2",
@@ -461,7 +478,7 @@ PrivateKey = {expected_peer.private_key}
 [Peer]
 PublicKey = {vpn.wireguard.public_key}
 AllowedIPs = {",".join(expected_peer.allowed_ips)}
-Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info and vpn.connection_info.type==ConnectionType.SSH else "[INSERT_VPN_IP]"}:{vpn.wireguard.listen_port}
+Endpoint = {vpn.connection_info.data.ip_address if vpn.connection_info and vpn.connection_info.type == ConnectionType.SSH else "[INSERT_VPN_IP]"}:{vpn.wireguard.listen_port}
 PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # Execute Test
@@ -471,30 +488,40 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert response.status_code == HTTPStatus.OK
         assert response.text == expected_config
 
-    def test_generate_peer_keys_no_vpn(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_generate_peer_keys_no_vpn(self, mock_vpn_manager, test_input):
         """Try to generate new peer keys but the vpn doesn't exist."""
         # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.post("/vpn/blah/peer/10.20.40.2/generate-wireguard-keys", json={"message": "Sample message"})
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_generate_peer_keys_no_peer(self, test_input, mock_vpn_manager):
-        """Try to generate new peer keys but the peer doesn't exist."""
-        # Set up Test
+        vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
         response = client.post(
-            f"/vpn/{test_input.name}/peer/10.20.40.23/generate-wireguard-keys", json={"message": "Sample message"}
+            f"/vpn/{vpn.name}/peer/10.20.40.2/generate-wireguard-keys", json={"message": "Sample message"}
         )
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_generate_peer_keys_no_peer(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
+        """Try to generate new peer keys but the peer doesn't exist."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.post(
+            f"/vpn/{vpn.name}/peer/10.20.40.23/generate-wireguard-keys", json={"message": "Sample message"}
+        )
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -504,16 +531,19 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_codecs,
         mock_ssm_client,
         mock_ssh_client,
-        mock_vpn_manager,
-        mock_ssh_command,
         mock_ssm_command,
-        mock_dynamo_db,
+        mock_ssh_command,
+        mock_dynamodb,
+        mock_vpn_manager,
         test_input,
     ):
         """Try generating a new key-pair for a peer."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
+
         mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY".encode(), "GENERATED_PUBLIC_KEY".encode()]
         expected_peer = PeerResponseModel(
             ip_address="10.20.40.2",
@@ -552,7 +582,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert actual_peer == expected_peer
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        all_peers = mock_dynamodb._get_all_peers_from_server()
         for db_peer in all_peers[vpn.name]:
             if db_peer.ip_address == expected_peer.ip_address:
                 assert db_peer.public_key == "GENERATED_PUBLIC_KEY"
@@ -564,6 +594,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                 if wg_peer.wg_ip_address == expected_peer.ip_address:
                     assert wg_peer.public_key == expected_peer.public_key
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -573,14 +604,11 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         mock_codecs,
         mock_ssm_client,
         mock_ssh_client,
-        test_input,
-        mock_ssh_command,
         mock_ssm_command,
+        mock_ssh_command,
+        mock_dynamodb,
         mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        test_input,
     ):
         """
         Try adding a peer but have the server auto-generate the keys and IP address.  This also tests adding multiple
@@ -588,7 +616,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
         mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY2".encode(), "GENERATED_PUBLIC_KEY2".encode()]
         peer_config = PeerRequestModel(
             allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
@@ -622,7 +652,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         actual_peer = PeerResponseModel(**response.json())
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        all_peers = mock_dynamodb._get_all_peers_from_server()
         assert actual_peer.ip_address in [peer.ip_address for peer in all_peers[vpn.name]]
 
         # Validate the peer was added to the mock WireGuard server
@@ -643,41 +673,50 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                     break
             assert found_wg_peer is True
 
-    def test_add_tag_no_vpn(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_tag_no_vpn(self, mock_vpn_manager, test_input):
         """Try to add a tag but the vpn doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.put("/vpn/blah/peer/10.20.40.2/tag/tag4", json={"message": "Sample message"})
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_add_tag_no_peer(self, test_input, mock_vpn_manager):
-        """Try to add a tag but the peer doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.put(f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag4", json={"message": "Sample message"})
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_add_tag(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
-        """Add a tag to a peer."""
         # Set up Test
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.put(f"/vpn/{vpn.name}/peer/10.20.40.2/tag/tag4", json={"message": "Sample message"})
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_tag_no_peer(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Try to add a tag but the peer doesn't exist."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.put(f"/vpn/{vpn.name}/peer/10.20.40.23/tag/tag4", json={"message": "Sample message"})
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_tag(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Add a tag to a peer."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+        new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
+
         expected_tag = "tag3"
         expected_peer = PeerResponseModel(
-            ip_address="10.20.40.2",
-            allowed_ips=["10.20.40.0/24"],
-            public_key="GENERATED_PUBLIC_KEY",
+            ip_address=new_peer.ip_address,
+            allowed_ips=new_peer.allowed_ips,
+            public_key=new_peer.public_key,
             private_key=SecretStr("**********"),
-            persistent_keepalive=25,
-            tags=["tag1", expected_tag],
+            persistent_keepalive=new_peer.persistent_keepalive,
+            tags=new_peer.tags + [expected_tag],
         )
 
         # Execute Test
@@ -690,78 +729,32 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert actual_peer == expected_peer
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        all_peers = mock_dynamodb._get_all_peers_from_server()
         for db_peer in all_peers[vpn.name]:
             if db_peer.ip_address == expected_peer.ip_address:
                 assert expected_tag in db_peer.tags
 
-    def test_add_tag_again(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_tag_again(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Try adding the same tag again.  This validates that it is idempotent."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        expected_tag = "tag3"
+        new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
+
         expected_peer = PeerResponseModel(
-            ip_address="10.20.40.2",
-            allowed_ips=["10.20.40.0/24"],
-            public_key="GENERATED_PUBLIC_KEY",
+            ip_address=new_peer.ip_address,
+            allowed_ips=new_peer.allowed_ips,
+            public_key=new_peer.public_key,
             private_key=SecretStr("**********"),
-            persistent_keepalive=25,
-            tags=["tag1", expected_tag],
+            persistent_keepalive=new_peer.persistent_keepalive,
+            tags=new_peer.tags,
         )
 
         # Execute Test
         response = client.put(
-            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}", json={"message": "Sample message"}
-        )
-        actual_peer = PeerResponseModel(**response.json())
-
-        # Validate Results
-        assert actual_peer == expected_peer
-
-    def test_remove_tag_no_vpn(self, test_input, mock_vpn_manager):
-        """Try to remove a tag but the vpn doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.request("DELETE", "/vpn/blah/peer/10.20.40.2/tag/tag1", json={"message": "Sample message"})
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_remove_tag_no_peer(self, test_input, mock_vpn_manager):
-        """Try to remove a tag but the peer doesn't exist."""
-        # Set up Test
-        peer_router.vpn_manager = mock_vpn_manager
-
-        # Execute Test
-        response = client.request(
-            "DELETE", f"/vpn/{test_input.name}/peer/10.20.40.23/tag/tag1", json={"message": "Sample message"}
-        )
-
-        # Validate Results
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    def test_remove_tag(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
-        """Remove a tag from a peer."""
-        # Set up Test
-        vpn = test_input
-        peer_router.vpn_manager = mock_vpn_manager
-        expected_tag = "tag3"
-        expected_peer = PeerResponseModel(
-            ip_address="10.20.40.2",
-            allowed_ips=["10.20.40.0/24"],
-            public_key="GENERATED_PUBLIC_KEY",
-            private_key=SecretStr("**********"),
-            persistent_keepalive=25,
-            tags=["tag1"],
-        )
-
-        # Execute Test
-        response = client.request(
-            "DELETE",
-            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}",
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{new_peer.tags[0]}",
             json={"message": "Sample message"},
         )
         actual_peer = PeerResponseModel(**response.json())
@@ -770,30 +763,65 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert actual_peer == expected_peer
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        all_peers = mock_dynamodb._get_all_peers_from_server()
         for db_peer in all_peers[vpn.name]:
             if db_peer.ip_address == expected_peer.ip_address:
-                assert expected_tag not in db_peer.tags
+                assert expected_peer.tags == db_peer.tags
 
-    def test_remove_tag_again(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
-        """Remove same tag again to validate it is idempotent."""
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_remove_tag_no_vpn(self, mock_vpn_manager, test_input):
+        """Try to remove a tag but the vpn doesn't exist."""
         # Set up Test
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
-        expected_tag = "tag3"
+
+        # Execute Test
+        response = client.request(
+            "DELETE", f"/vpn/{vpn.name}/peer/10.20.40.2/tag/tag1", json={"message": "Sample message"}
+        )
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_remove_tag_no_peer(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Try to remove a tag but the peer doesn't exist."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+
+        # Execute Test
+        response = client.request(
+            "DELETE", f"/vpn/{vpn.name}/peer/10.20.40.23/tag/tag1", json={"message": "Sample message"}
+        )
+
+        # Validate Results
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_remove_tag(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Remove a tag from a peer."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+        new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
+
+        remove_tag = "tag1"
         expected_peer = PeerResponseModel(
-            ip_address="10.20.40.2",
-            allowed_ips=["10.20.40.0/24"],
-            public_key="GENERATED_PUBLIC_KEY",
+            ip_address=new_peer.ip_address,
+            allowed_ips=new_peer.allowed_ips,
+            public_key=new_peer.public_key,
             private_key=SecretStr("**********"),
-            persistent_keepalive=25,
-            tags=["tag1"],
+            persistent_keepalive=new_peer.persistent_keepalive,
+            tags=[],
         )
 
         # Execute Test
         response = client.request(
             "DELETE",
-            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{expected_tag}",
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{remove_tag}",
             json={"message": "Sample message"},
         )
         actual_peer = PeerResponseModel(**response.json())
@@ -801,47 +829,117 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         # Validate Results
         assert actual_peer == expected_peer
 
-    def test_get_peer_by_tag_no_vpn(self, test_input, mock_vpn_manager):
+        # Validate the peer was added to DynamoDB
+        all_peers = mock_dynamodb._get_all_peers_from_server()
+        for db_peer in all_peers[vpn.name]:
+            if db_peer.ip_address == expected_peer.ip_address:
+                assert remove_tag not in db_peer.tags
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_remove_tag_again(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Remove a tag that does not exist to validate it is idempotent."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        peer_router.vpn_manager = mock_vpn_manager
+        new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
+
+        remove_tag = "tag_not_exist"
+        expected_peer = PeerResponseModel(
+            ip_address=new_peer.ip_address,
+            allowed_ips=new_peer.allowed_ips,
+            public_key=new_peer.public_key,
+            private_key=SecretStr("**********"),
+            persistent_keepalive=new_peer.persistent_keepalive,
+            tags=new_peer.tags,
+        )
+
+        # Execute Test
+        response = client.request(
+            "DELETE",
+            f"/vpn/{vpn.name}/peer/{expected_peer.ip_address}/tag/{remove_tag}",
+            json={"message": "Sample message"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        actual_peer = PeerResponseModel(**response.json())
+
+        # Validate Results
+        assert actual_peer == expected_peer
+
+        # Validate the tags in the db are as expected
+        all_peers = mock_dynamodb._get_all_peers_from_server()
+        for db_peer in all_peers[vpn.name]:
+            if db_peer.ip_address == expected_peer.ip_address:
+                assert expected_peer.tags == db_peer.tags
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_by_tag_no_vpn(self, mock_vpn_manager, test_input):
         """Try to get a peer by tag but the VPN server doesn't exist."""
         # Set up Test
+        vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.get("/vpn/blah/peer/tag/tag1")
+        response = client.get(f"/vpn/{vpn.name}/peer/tag/tag1")
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_get_peer_by_tag_not_exist(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_by_tag_not_exist(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try to get a peer by tag but no peers match."""
         # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
         # Execute Test
-        response = client.get(f"/vpn/{test_input.name}/peer/tag/blah")
+        response = client.get(f"/vpn/{vpn.name}/peer/tag/blah")
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
         assert response.json() == []
 
-    def test_get_peer_by_tag(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_by_tag(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Try getting a peer by tag. Don't hide the secrets."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
+        # Inject a second peer
+        add_peer(
+            vpn,
+            mock_dynamodb,
+            PeerDbModel(
+                peer_id="2345",
+                ip_address="10.20.40.3",
+                allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
+                public_key="PEER2_PUBLIC_KEY",
+                private_key="PEER2_PRIVATE_KEY",
+                persistent_keepalive=25,
+                tags=["tag1", "tag2"],
+                message="Sample message",
+            ),
+        )
+
         expected_peers = [
             PeerResponseModel(
                 ip_address="10.20.40.2",
                 allowed_ips=["10.20.40.0/24"],
-                public_key="GENERATED_PUBLIC_KEY",
-                private_key=SecretStr("GENERATED_PRIVATE_KEY"),
+                public_key="PEER_PUBLIC_KEY",
+                private_key=SecretStr("PEER_PRIVATE_KEY"),
                 persistent_keepalive=25,
                 tags=["tag1"],
             ),
             PeerResponseModel(
                 ip_address="10.20.40.3",
                 allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
-                public_key="GENERATED_PUBLIC_KEY2",
-                private_key=SecretStr("GENERATED_PRIVATE_KEY2"),
+                public_key="PEER2_PUBLIC_KEY",
+                private_key=SecretStr("PEER2_PRIVATE_KEY"),
                 persistent_keepalive=25,
                 tags=["tag1", "tag2"],
             ),
@@ -854,37 +952,71 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         assert response.status_code == HTTPStatus.OK
         assert [PeerResponseModel(**peer_data) for peer_data in response.json()] == expected_peers
 
-    def test_get_peer_by_tag_hide_secrets(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_peer_by_tag_hide_secrets(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try getting a peer by tag but hide the secrets."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        expected_peer = PeerResponseModel(
-            ip_address="10.20.40.3",
-            allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
-            public_key="GENERATED_PUBLIC_KEY2",
-            private_key=SecretStr("**********"),
-            persistent_keepalive=25,
-            tags=["tag1", "tag2"],
+        new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
+        # Inject a second peer
+        add_peer(
+            vpn,
+            mock_dynamodb,
+            PeerDbModel(
+                peer_id="2345",
+                ip_address="10.20.40.3",
+                allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
+                public_key="PEER2_PUBLIC_KEY",
+                private_key="PEER2_PRIVATE_KEY",
+                persistent_keepalive=25,
+                tags=["tag1", "tag2"],
+                message="Sample message",
+            ),
         )
 
+        expected_peers = [
+            PeerResponseModel(
+                ip_address="10.20.40.2",
+                allowed_ips=["10.20.40.0/24"],
+                public_key="PEER_PUBLIC_KEY",
+                private_key=SecretStr("**********"),
+                persistent_keepalive=25,
+                tags=["tag1"],
+            ),
+            PeerResponseModel(
+                ip_address="10.20.40.3",
+                allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
+                public_key="PEER2_PUBLIC_KEY",
+                private_key=SecretStr("**********"),
+                persistent_keepalive=25,
+                tags=["tag1", "tag2"],
+            ),
+        ]
+
         # Execute Test
-        response = client.get(f"/vpn/{vpn.name}/peer/tag/tag2")
+        response = client.get(f"/vpn/{vpn.name}/peer/tag/tag1?hide_secrets=true")
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-        assert [PeerResponseModel(**peer_data) for peer_data in response.json()] == [expected_peer]
+        assert [PeerResponseModel(**peer_data) for peer_data in response.json()] == expected_peers
 
-    def test_import_peers_no_vpn(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_import_peers_no_vpn(self, mock_vpn_manager, test_input):
         """Try to import peers from the wireguard server but the vpn doesn't exist."""
         # Set up Test
+        vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.post("/vpn/blah/import", json={"message": "Sample message"})
+        response = client.post(f"/vpn/{vpn.name}/import", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -892,27 +1024,26 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         self,
         mock_ssm_client,
         mock_ssh_client,
-        test_input,
-        mock_ssh_command,
         mock_ssm_command,
+        mock_ssh_command,
+        mock_dynamodb,
         mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        test_input,
     ):
         """Importing peers from the wireguard server."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        expected_peer = PeerRequestModel(
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
+
+        expected_peer = PeerResponseModel(
             ip_address="10.20.40.4",
             allowed_ips=["10.20.40.0/24"],
             public_key="PEER_PUBLIC_KEY4",
             private_key=None,
             persistent_keepalive=25,
             tags=["imported"],
-            message="Sample message",
         )
         wg_peer = WgServerPeerModel(
             wg_ip_address=expected_peer.ip_address,
@@ -925,14 +1056,6 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             preshared_key=None,
         )
 
-        mock_ssh_command.server = WgServerModel(
-            interface=vpn.wireguard.interface,
-            public_key=vpn.wireguard.public_key,
-            private_key=vpn.wireguard.private_key,
-            listen_port=vpn.wireguard.listen_port,
-            fw_mark="off",
-        )
-
         if vpn.connection_info is not None:
             # Inject the peer into the mock WireGuard server
             if vpn.connection_info.type == ConnectionType.SSH:
@@ -943,7 +1066,6 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             if vpn.connection_info.type == ConnectionType.SSH:
                 ssh_client = mock_ssh_client()
                 ssh_client.exec_command = mock_ssh_command.command
-
             elif vpn.connection_info.type == ConnectionType.SSM:
                 mock_ssm_client_instance = mock_ssm_client()
                 mock_ssm_client_instance.send_command = mock_ssm_command.send_command  # Random ID
@@ -955,70 +1077,54 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         # Validate Results
         if vpn.connection_info is None:
             assert response.status_code == HTTPStatus.NOT_FOUND
+        elif vpn.connection_info.type == ConnectionType.SSM:
+            # Importing peers over SSM is not supported currently
+            assert response.status_code == HTTPStatus.BAD_REQUEST
         else:
             assert response.status_code == HTTPStatus.OK
+            assert response.json() == [expected_peer.model_dump()]
 
             # Validate the peer was added to DynamoDB
             found_db_peer = False
-            all_peers = mock_dynamo_db._get_all_peers_from_server()
+            all_peers = mock_dynamodb._get_all_peers_from_server()
             for db_peer in all_peers[vpn.name]:
                 if db_peer.ip_address == expected_peer.ip_address:
                     found_db_peer = True
-                    compare_peer_request_and_response(
-                        expected_peer, PeerResponseModel(**db_peer.model_dump()), hide_secrets=False
-                    )
+                    assert expected_peer == PeerResponseModel(**db_peer.model_dump())
                     break
             assert found_db_peer is True
 
-            # Validate the peer was added to the mock WireGuard server
-            if vpn.connection_info.type == ConnectionType.SSH:
-                peers = mock_ssh_command.peers
-            elif vpn.connection_info.type == ConnectionType.SSM:
-                peers = mock_ssm_command.peers
-            else:
-                peers = []
-
-            found_wg_peer = False
-            for wg_peer in peers:
-                if wg_peer.wg_ip_address == expected_peer.ip_address:
-                    found_wg_peer = True
-                    assert wg_peer.public_key == expected_peer.public_key
-                    assert wg_peer.persistent_keepalive == expected_peer.persistent_keepalive
-                    break
-            assert found_wg_peer is True
-
-            del_response = client.request(
-                "DELETE", f"/vpn/{test_input.name}/peer/10.20.40.4", json={"message": "Sample message"}
-            )
-            assert del_response.status_code == HTTPStatus.OK
-
-    def test_delete_peer_no_vpn(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_delete_peer_no_vpn(self, mock_vpn_manager, test_input):
         """Try to delete a peer by tag but the VPN server doesn't exist."""
         # Set up Test
+        vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.request("DELETE", "/vpn/blah/peer/10.20.40.2", json={"message": "Sample message"})
+        response = client.request("DELETE", f"/vpn/{vpn.name}/peer/10.20.40.1", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_delete_peer_not_exist(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_delete_peer_not_exist(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Try to delete a peer by tag but no peers match.  This also validates that it is idempotent."""
         # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
-        response = client.request(
-            "DELETE", f"/vpn/{test_input.name}/peer/10.20.40.23", json={"message": "Sample message"}
-        )
+        response = client.request("DELETE", f"/vpn/{vpn.name}/peer/10.20.40.1", json={"message": "Sample message"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
 
-    def test_peer_history_invalid_time(
-        self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_peer_history_table, mock_dynamo_db
-    ):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_peer_history_no_vpn(self, mock_vpn_manager, test_input):
         """Test peer history endpoint with invalid start/end time."""
         vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
@@ -1029,124 +1135,189 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         response = client.get(
             f"/vpn/{vpn.name}/peer/{ip}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
         )
-        assert response.status_code == 400
-        assert "Start time must be before end time" in response.text
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-    def test_tag_history_invalid_time(self, test_input, mock_vpn_manager):
-        """Test tag history endpoint with invalid start/end time."""
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_peer_history_invalid_time(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
+        """Test peer history endpoint with invalid start/end time."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        tag = "tag1"
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
+        ip = "10.20.40.2"
         now = datetime.datetime.now()
         start = now
         end = now - datetime.timedelta(hours=1)
         response = client.get(
-            f"/vpn/{vpn.name}/tag/{tag}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
+            f"/vpn/{vpn.name}/peer/{ip}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
         )
-        assert response.status_code == 400
+        assert response.status_code == HTTPStatus.BAD_REQUEST
         assert "Start time must be before end time" in response.text
 
-    def test_peer_history_no_history(self, test_input, mock_vpn_manager):
-        """Test peer history endpoint when there is no history."""
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_peer_history_no_peer(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
+        """Test peer history endpoint when there is no peer."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
         ip = "10.20.40.99"
         response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
-        assert response.status_code == 404
-        assert "No peer history found" in response.text
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert "No peer with IP" in response.text
 
-    def test_tag_history_no_history(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_tag_history_no_history(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
         """Test tag history endpoint when there is no history."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
         tag = "nope"
+
         response = client.get(f"/vpn/{vpn.name}/tag/{tag}/history")
-        assert response.status_code == 404
+        assert response.status_code == HTTPStatus.NOT_FOUND
         assert "No tag_history found" in response.text
 
-    def test_peer_history_all(self, test_input, mock_vpn_manager, mock_peer_history_table):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_peer_history_all(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test peer history endpoint returns all history."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        ip = "10.20.40.2"
-        response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
+        peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
+
+        # Execute Test
+        response = client.get(f"/vpn/{vpn.name}/peer/{peer1.ip_address}/history")
+
+        # Validate Results
         assert response.status_code == 200
         data = response.json()
-        # Assert all entries contains the expect ip address
-        assert all(d["ip_address"] == ip for d in data)
+        # Assert all entries contains the expected ip address
+        assert all(d["ip_address"] == peer1.ip_address for d in data)
         # Assert the entries are in descending order by timestamp
         assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+        # Assert the expected messages exist in the history
+        for message in ["Generate new keys", "Add new peer"]:
+            assert any(message in d["message"] for d in data)
 
-    def test_tag_history_all(self, test_input, mock_vpn_manager, mock_peer_history_table):
-        """Test tag history endpoint returns all history."""
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_tag_history_all(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Test peer history endpoint returns all history."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
         tag = "tag1"
+
+        # Execute Test
         response = client.get(f"/vpn/{vpn.name}/tag/{tag}/history")
+
+        # Validate Results
         assert response.status_code == 200
         data = response.json()
         # Assert all entries contains the expected tag
         assert all(tag in peer_history["tags"] for peer_histories in data.values() for peer_history in peer_histories)
+        for peer in [peer1, peer2]:
+            history_records = data.get(peer.ip_address)
+            assert history_records is not None
+            # Assert the entries are in descending order by timestamp
+            assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(history_records, history_records[1:]))
+            if peer == peer1:
+                assert len(history_records) == 3
+                # Assert the expected messages exist in the history
+                for message in ["Generate new keys", "Add new peer"]:
+                    assert any(message in d["message"] for d in history_records)
+            elif peer == peer2:
+                assert len(history_records) == 2
+                # Assert the expected messages exist in the history
+                for message in ["Add second peer"]:
+                    assert any(message in d["message"] for d in history_records)
 
-    def test_peer_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
-        """Test peer history endpoint with start/end time filters."""
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_peer_history_with_time(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
+        """Test peer history endpoint returns all history."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        ip = "10.20.40.2"
+
+        peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
+
+        # Execute Test
         start = 1626000000000000000
-        end = 1626000003000000000
+        end = 1626000002000000000
         response = client.get(
-            f"/vpn/{vpn.name}/peer/{ip}/history",
+            f"/vpn/{vpn.name}/peer/{peer1.ip_address}/history",
             params={"start_time": start / 1_000_000_000, "end_time": end / 1_000_000_000},
         )
+
+        # Validate Results
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 3
-        # Assert all entries contains the expect ip address
-        assert all(d["ip_address"] == ip for d in data)
+        # Assert all entries contains the expected ip address
+        assert all(d["ip_address"] == peer1.ip_address for d in data)
         # Assert the entries are in descending order by timestamp
         assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(data, data[1:]))
+        # Assert the expected messages exist in the history
+        assert any("Add new peer" in d["message"] for d in data)
+        assert any("Add tag2" in d["message"] for d in data)
+        assert not any("Generate new keys" in d["message"] for d in data)
 
-    def test_tag_history_with_time(self, test_input, mock_vpn_manager, mock_peer_history_table):
-        """Test tag history endpoint with start/end time filters."""
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_tag_history_with_time(
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
+    ):
+        """Test peer history endpoint returns all history."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
         tag = "tag1"
+
+        # Execute Test
         start = 1626000000000000000
-        end = 1626000003000000000
+        end = 1626000002000000000
         response = client.get(
             f"/vpn/{vpn.name}/tag/{tag}/history",
             params={"start_time": start / 1_000_000_000, "end_time": end / 1_000_000_000},
         )
+
+        # Validate Results
         assert response.status_code == 200
         data = response.json()
-        assert sum(len(items) for items in data.values()) == 4
+
         # Assert all entries contains the expected tag
         assert all(tag in peer_history["tags"] for peer_histories in data.values() for peer_history in peer_histories)
 
-    def test_remove_tag_history(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
-        """Remove a tag from a peer. Assert that the tag is removed from the peer's history."""
-        # Set up Test
-        vpn = test_input
-        peer_router.vpn_manager = mock_vpn_manager
-        test_tag = "tag1"
-        test_ip_address = "10.20.40.2"
+        for peer in [peer1, peer2]:
+            history_records = data.get(peer.ip_address)
+            assert history_records is not None
+            # Assert the entries are in descending order by timestamp
+            assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(history_records, history_records[1:]))
+            if peer == peer1:
+                assert len(history_records) == 2
+                # Assert the expected messages exist in the history
+                for message in ["Add tag2", "Add new peer"]:
+                    assert any(message in d["message"] for d in history_records)
+                assert not any("Generate new keys" in d["message"] for d in history_records)
+            elif peer == peer2:
+                assert len(history_records) == 1
+                # Assert the expected messages exist in the history
+                for message in ["Add second peer"]:
+                    assert any(message in d["message"] for d in history_records)
 
-        # Execute Test
-        client.request(
-            "DELETE", f"/vpn/{vpn.name}/peer/{test_ip_address}/tag/{test_tag}", json={"message": "Sample message"}
-        )
-
-        # Validate Results
-        response = client.get(f"/vpn/{vpn.name}/peer/{test_ip_address}/history")
-        assert response.status_code == 200
-        data = response.json()
-
-        assert test_tag not in PeerHistoryResponseModel(**data[0]).tags
-
-    def test_update_peer_server_not_exist(self, test_input, mock_vpn_manager):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_update_peer_server_not_exist(self, mock_vpn_manager, test_input):
         """Try updating a peer to a server that doesn't exist."""
         # Set up Test
+        vpn = test_input
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.40.2",
@@ -1160,30 +1331,29 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # -----------------------------------------
         # Execute Test -
-        response = client.put(f"/vpn/blah/peer/{peer_config.ip_address}", data=peer_config.model_dump_json())
+        response = client.put(f"/vpn/{vpn.name}/peer/{peer_config.ip_address}", data=peer_config.model_dump_json())
 
         # Validate Results
         assert response.status_code == HTTPStatus.NOT_FOUND
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
-    def test_update_peer_server_peer_not_exist(
+    def test_update_peer_not_exist(
         self,
         mock_ssm_client,
         mock_ssh_client,
-        test_input,
         mock_ssh_command,
         mock_ssm_command,
         mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        mock_dynamodb,
+        test_input,
     ):
         """Try updating a peer that doesn't exist.  This should add the peer."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
         expected_peer_config = PeerRequestModel(
             ip_address="10.20.40.4",
@@ -1223,8 +1393,8 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         compare_peer_request_and_response(expected_peer_config, updated_peer, hide_secrets=True)
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
-        dynamo_peer = PeerResponseModel(**all_peers[vpn.name][2].model_dump())
+        all_peers = mock_dynamodb._get_all_peers_from_server()
+        dynamo_peer = PeerResponseModel(**all_peers[vpn.name][0].model_dump())
         compare_peer_request_and_response(expected_peer_config, dynamo_peer, hide_secrets=False)
 
         # Validate the peer was added to the mock WireGuard server
@@ -1245,6 +1415,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                     break
             assert found_wg_peer is True
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -1252,19 +1423,18 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         self,
         mock_ssm_client,
         mock_ssh_client,
-        test_input,
-        mock_ssh_command,
         mock_ssm_command,
+        mock_ssh_command,
+        mock_dynamodb,
         mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        test_input,
     ):
         """Update a peer.  Update the allowed IPs, public key, private key, persistent keepalive, and tags."""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
         expected_peer_config = PeerRequestModel(
             ip_address="10.20.40.2",
             allowed_ips=["10.20.40.0/24", "172.30.0.0/16"],
@@ -1303,7 +1473,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         compare_peer_request_and_response(expected_peer_config, updated_peer, hide_secrets=True)
 
         # Validate the peer was added to DynamoDB
-        all_peers = mock_dynamo_db._get_all_peers_from_server()
+        all_peers = mock_dynamodb._get_all_peers_from_server()
         dynamo_peer = PeerResponseModel(**all_peers[vpn.name][0].model_dump())
         compare_peer_request_and_response(expected_peer_config, dynamo_peer, hide_secrets=False)
 
@@ -1325,6 +1495,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                     break
             assert found_wg_peer is True
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -1332,19 +1503,18 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         self,
         mock_ssm_client,
         mock_ssh_client,
-        test_input,
-        mock_ssh_command,
         mock_ssm_command,
+        mock_ssh_command,
+        mock_dynamodb,
         mock_vpn_manager,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
-        mock_dynamo_db,
+        test_input,
     ):
         """Delete a peer."""
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         peer_router.vpn_manager = mock_vpn_manager
-        delete_ips = ["10.20.40.2", "10.20.40.3", "10.20.40.4"]
+        add_peer(vpn, mock_dynamodb)  # Inject existing peer
+        delete_ips = ["10.20.40.2", "10.20.40.3"]
 
         mock_ssh_command.server = WgServerModel(
             interface=vpn.wireguard.interface,
@@ -1373,7 +1543,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             assert get_response.status_code == HTTPStatus.NOT_FOUND
 
             # Validate the peer was deleted from DynamoDB
-            all_peers = mock_dynamo_db._get_all_peers_from_server()
+            all_peers = mock_dynamodb._get_all_peers_from_server()
             if len(all_peers) > 0:
                 assert [db_peer for db_peer in all_peers[vpn.name] if db_peer.ip_address == delete_ip] == []
 
@@ -1383,34 +1553,25 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                     if wg_peer.wg_ip_address == delete_ip:
                         assert wg_peer.wg_ip_address != delete_ip
 
-    def test_peer_history_no_exist(self, test_input, mock_vpn_manager, mock_vpn_table, mock_peer_table, mock_dynamo_db):
-        """Test peer history was removed after deletion"""
-        # Set up Test
-        vpn = test_input
-        peer_router.vpn_manager = mock_vpn_manager
-        delete_ips = ["10.20.40.2", "10.20.40.3"]
-
-        for delete_ip in delete_ips:
+            """Test peer history was removed after deletion"""
             # Execute Test - Get history of deleted peer
             response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}/history")
-            assert response.status_code == 200
-            data = PeerHistoryResponseModel(**response.json()[0])
+            assert response.status_code == HTTPStatus.NOT_FOUND
 
-            # Validate Results
-            assert data.ip_address == delete_ip
-            assert data.allowed_ips == [""]
-            assert data.public_key == ""
-            assert data.private_key is None
-            assert data.persistent_keepalive == 0
+            # Should the history get purged when the peer is deleted?  TBD.
+            db_history = mock_dynamodb.get_peer_history(vpn.name, delete_ip)
+            # assert len(db_history) == 0
 
-    def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_delete_vpn(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test deleting a VPN server"""
         # Set up Test
         vpn = test_input
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test - Delete the VPN server
-        response = client.request("DELETE", f"/vpn/{vpn.name}", json={"message": "Sample message"})
+        response = client.request("DELETE", f"/vpn/{vpn.name}", json={"message": "Delete VPN server"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
@@ -1419,9 +1580,9 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
 
         # ---------------------------------------------------
         # Execute Test - Verify this is idempotent
-        response = client.request("DELETE", f"/vpn/{vpn.name}", json={"message": "Sample message"})
+        response = client.request("DELETE", f"/vpn/{vpn.name}", json={"message": "Delete VPN server again"})
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == []

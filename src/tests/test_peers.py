@@ -32,6 +32,12 @@ def make_vpn_manager(tag_histories=None, peer_history=None):
         def get_peer_history(self, vpn_name, ip_address, start_time_ns, end_time_ns):
             return peer_history
 
+        def get_vpn(self, name):
+            return "VpnObject"
+
+        def get_peers_by_ip(self, vpn_name, ip_address):
+            return ["peer1"]
+
     return DummyVpnManager()
 
 
