@@ -10,11 +10,12 @@ from botocore.exceptions import ClientError, ParamValidationError
 from pydantic import BaseModel, ValidationError, field_validator
 
 from databases.in_mem_db import InMemoryDataStore
+from interfaces.peers import update_peer
 from models.connection import ConnectionModel, ConnectionType, build_wireguard_connection_model
 from models.peers import PeerDbModel
 from models.vpn import VpnModel, WireguardModel
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 UNKNOWN_USER_STRING = "[Unknown]"
 
@@ -206,7 +207,7 @@ class DynamoDb(InMemoryDataStore):
     def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, changed_by: str):
         """Update an existing peer."""
         # Update the peer in the DynamoDB table
-        self.peer_table.update_item(
+        response = self.peer_table.update_item(
             Key={"peer_id": updated_peer.peer_id},
             UpdateExpression="set tags=:newTags, allowed_ips=:newAllowedIps, public_key=:newPublicKey, private_key=:newPrivateKey, persistent_keepalive=:newPersistentKeepalive",
             ExpressionAttributeValues={
@@ -218,7 +219,12 @@ class DynamoDb(InMemoryDataStore):
             },
             ReturnValues="UPDATED_NEW",
         )
-        # TODO: Handle failure response
+        log.info(f"Updated peer in DynamoDB: {response['Attributes']}")
+        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
+            msg = f"Failed to update peer {update_peer.ip_address} [{update_peer.peer_id}] in DynamoDB: {response}"
+            log.error(msg)
+            # TODO: Handle failure response
+
         # Update the in-memory datastore
         super().update_peer(vpn_name, updated_peer)
 
@@ -236,13 +242,18 @@ class DynamoDb(InMemoryDataStore):
                 if connection_info.data.key_password is not None:
                     connection_info_dict["data"]["key_password"] = connection_info.data.key_password
 
-        self.vpn_table.update_item(
+        response = self.vpn_table.update_item(
             Key={"name": vpn_name},
             UpdateExpression="set connection_info=:newConnectionInfo",
             ExpressionAttributeValues={":newConnectionInfo": connection_info_dict},
             ReturnValues="UPDATED_NEW",
         )
-        # TODO: Handle failure response
+        log.info(f"Updated connection_info in DynamoDB: {response['Attributes']}")
+        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
+            msg = f"Failed to update connection info in DynamoDB: {response}"
+            log.error(msg)
+            # TODO: Handle failure response
+
         super().update_connection_info(vpn_name, connection_info)  # Update the in-memory datastore
 
     def write_peer_history_db(self, peer: PeerHistoryDynamoModel):
@@ -254,16 +265,16 @@ class DynamoDb(InMemoryDataStore):
             self.peer_history_table.put_item(Item=item)
         except ParamValidationError as e:
             # e.g. invalid types or missing required fields
-            logger.exception("Invalid item payload for DynamoDB: %r", item)
+            log.exception("Invalid item payload for DynamoDB: %r", item)
             raise ValueError("Peer model has invalid data") from e
         except ClientError as e:
             code = e.response["Error"]["Code"]
             msg = e.response["Error"]["Message"]
-            logger.error("DynamoDB ClientError %s: %s", code, msg)
+            log.error("DynamoDB ClientError %s: %s", code, msg)
             raise
         except Exception:
             # catch anything else (network issue, etc.)
-            logger.exception("Unexpected error writing to DynamoDB")
+            log.exception("Unexpected error writing to DynamoDB")
             raise
 
     def dedupe_history(self, peers_history: list[PeerHistoryDynamoModel]) -> list[PeerHistoryDynamoModel]:
@@ -312,7 +323,7 @@ class DynamoDb(InMemoryDataStore):
                 peer_history = PeerHistoryDynamoModel.model_validate(item)
                 peers_history.append(peer_history)
         except ValidationError as e:
-            logger.error("Validation error while processing peer history items: %s", e)
+            log.error("Validation error while processing peer history items: %s", e)
             raise ValueError("Peer history items have invalid data") from e
         return self.dedupe_history(peers_history)
 
@@ -343,7 +354,7 @@ class DynamoDb(InMemoryDataStore):
                 peer_tag_history = PeerHistoryDynamoModel.model_validate(item)
                 peers_tag_history.append(peer_tag_history)
         except ValidationError as e:
-            logger.error("Validation error while processing peer tag history items: %s", e)
+            log.error("Validation error while processing peer tag history items: %s", e)
             raise ValueError("Peer history items have invalid data") from e
 
         peers_tag_history = self.dedupe_history(peers_tag_history)
