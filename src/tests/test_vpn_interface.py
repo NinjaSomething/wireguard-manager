@@ -14,21 +14,17 @@ from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
 from models.vpn import VpnModel, VpnPutModel, WireguardModel
 from models.wg_server import WgServerModel
+from tests.helper import add_vpn
 
-"""
-ALL THE TESTS HERE ARE RUN SUCCESSIVELY.  IF THE FIRST TEST FAILS, THE REST WILL PROBABLY FAIL TOO.
-"""
 
 app = WireguardManagerAPI()
 client = TestClient(app)
 setup_app_routes(app)
 
-client = TestClient(app)
-
 test_parameters = [
     VpnModel(
         name="test-vpn",
-        description="Test VPN Server",
+        description="Test VPN Server 1",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
             ip_network="10.20.40.0/24",
@@ -41,7 +37,7 @@ test_parameters = [
     ),
     VpnModel(
         name="test-vpn",
-        description="Test VPN Server",
+        description="Test VPN Server 2",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
             ip_network="10.20.40.0/24",
@@ -57,7 +53,7 @@ test_parameters = [
     ),
     VpnModel(
         name="test-vpn",
-        description="Test VPN Server",
+        description="Test VPN Server 3",
         wireguard=WireguardModel(
             ip_address="10.20.40.1",
             ip_network="10.20.40.0/24",
@@ -76,7 +72,6 @@ test_parameters = [
 ]
 
 
-@pytest.mark.parametrize("test_input", test_parameters, scope="class")
 class TestVpnInterface:
     """
     The DynamoDB tables will persist across tests.  This is intentional to avoid repeatedly creating and the same
@@ -89,13 +84,15 @@ class TestVpnInterface:
       managing the VPN server.
     """
 
-    def test_get_all_vpn_no_servers(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, test_input):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_all_vpn_no_servers(self, mock_vpn_manager, test_input):
         """Test getting all servers before any are added"""
         vpn_router.vpn_manager = mock_vpn_manager
         response = client.get("/vpn")
         assert response.status_code == 200
         assert response.json() == []
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -105,11 +102,8 @@ class TestVpnInterface:
         mock_ssh_client,
         mock_ssh_command,
         mock_ssm_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
         mock_vpn_manager,
-        mock_dynamo_db,
+        mock_dynamodb,
         test_input,
     ):
         """Try adding an VPN server with an invalid wireguard interface"""
@@ -137,9 +131,10 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+            all_vpns = mock_dynamodb._get_all_vpn_from_server()
             assert all_vpns == []
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -149,11 +144,8 @@ class TestVpnInterface:
         mock_ssh_client,
         mock_ssh_command,
         mock_ssm_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
         mock_vpn_manager,
-        mock_dynamo_db,
+        mock_dynamodb,
         test_input,
     ):
         """Try adding an VPN server but there are communication issues with the server"""
@@ -186,12 +178,11 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+            all_vpns = mock_dynamodb._get_all_vpn_from_server()
             assert all_vpns == []
 
-    def test_add_server_invalid_ip_network(
-        self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input
-    ):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_add_server_invalid_ip_network(self, mock_vpn_manager, mock_dynamodb, test_input):
         """Try adding an VPN server with an invalid address space"""
         # Set up Test
         vpn = deepcopy(test_input)
@@ -209,9 +200,10 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.BAD_REQUEST
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == []
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -221,16 +213,13 @@ class TestVpnInterface:
         mock_ssh_client,
         mock_ssh_command,
         mock_ssm_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
         mock_vpn_manager,
-        mock_dynamo_db,
+        mock_dynamodb,
         test_input,
     ):
         """Successfully add a VPN server"""
         # Set up Test
-        vpn = test_input
+        vpn = deepcopy(test_input)
         vpn_config = VpnPutModel(
             wireguard=vpn.wireguard,
             connection_info=vpn.connection_info,
@@ -250,15 +239,17 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.OK
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == [vpn]
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     def test_add_server_existing_name(
-        self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
     ):
         """Try adding a VPN server vpn with a name that already exists"""
         # Set up Test
         vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn.wireguard.ip_address = "10.20.40.2"  # Change IP address to avoid conflict
         vpn.wireguard.public_key = "DIFFERENT_KEY"
         vpn_config = VpnPutModel(
@@ -274,15 +265,17 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == [test_input]
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     def test_add_server_existing_public_key(
-        self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input
+        self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input
     ):
         """Try adding an VPN server that already exists using the same private key"""
         # Set up Test
         vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn.wireguard.ip_address = "10.20.40.2"  # Change IP address to avoid conflict
         vpn.name = "DIFFERENT_NAME"
         vpn_config = VpnPutModel(
@@ -297,13 +290,15 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == HTTPStatus.CONFLICT
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == [test_input]
 
-    def test_get_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, test_input):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_vpn(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test getting a single VPN server"""
         # Set up Test - Get the VPN server.  Don't hide secrets
-        vpn = test_input
+        vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -333,10 +328,12 @@ class TestVpnInterface:
         assert response.status_code == 200
         assert VpnModel(**response.json()) == expected_value
 
-    def test_get_all_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, test_input):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_get_all_vpn(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test Getting all VPN servers"""
         # Set up Test - Get all VPN servers but don't hide secrets
-        vpn = test_input
+        vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -364,9 +361,11 @@ class TestVpnInterface:
         assert response.status_code == 200
         assert [VpnModel(**vpn) for vpn in response.json()] == [expected_value]
 
-    def test_delete_connection(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_delete_connection(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         # Set up Test - Get all VPN servers but don't hide secrets
-        vpn = test_input
+        vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn_router.vpn_manager = mock_vpn_manager
 
         if vpn.connection_info is not None:
@@ -378,9 +377,10 @@ class TestVpnInterface:
             response = client.get(f"/vpn/{vpn.name}?hide_secrets=false")
             updated_vpn = VpnModel(**response.json())
             assert updated_vpn.connection_info is None
-            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+            all_vpns = mock_dynamodb._get_all_vpn_from_server()
             assert all_vpns == [updated_vpn]
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -390,11 +390,8 @@ class TestVpnInterface:
         mock_ssh_client,
         mock_ssh_command,
         mock_ssm_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
         mock_vpn_manager,
-        mock_dynamo_db,
+        mock_dynamodb,
         test_input,
     ):
         """Try adding a connection with an invalid wireguard interface"""
@@ -402,6 +399,9 @@ class TestVpnInterface:
         if test_input.connection_info is not None:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
+            add_vpn(
+                expected_vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router
+            )
 
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 mock_ssh_command.server = WgServerModel(
@@ -438,9 +438,10 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+            all_vpns = mock_dynamodb._get_all_vpn_from_server()
             assert all_vpns == [expected_vpn]
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -450,11 +451,8 @@ class TestVpnInterface:
         mock_ssh_client,
         mock_ssh_command,
         mock_ssm_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
         mock_vpn_manager,
-        mock_dynamo_db,
+        mock_dynamodb,
         test_input,
     ):
         """Try adding a connection but there are communication issues with the server"""
@@ -462,6 +460,9 @@ class TestVpnInterface:
         if test_input.connection_info is not None:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
+            add_vpn(
+                expected_vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router
+            )
             vpn_router.vpn_manager = mock_vpn_manager
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 ssh_client = mock_ssh_client()
@@ -485,13 +486,14 @@ class TestVpnInterface:
 
             # Validate Results
             assert response.status_code == HTTPStatus.BAD_REQUEST
-            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+            all_vpns = mock_dynamodb._get_all_vpn_from_server()
             assert all_vpns == [expected_vpn]
 
             # Break down test
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 ssh_client.connect.side_effect = None
 
+    @pytest.mark.parametrize("test_input", test_parameters)
     @patch("server_manager.ssh.paramiko.RSAKey", MagicMock())
     @patch("server_manager.ssh.paramiko.SSHClient")
     @patch("server_manager.ssm.boto3.client")
@@ -501,16 +503,14 @@ class TestVpnInterface:
         mock_ssh_client,
         mock_ssh_command,
         mock_ssm_command,
-        mock_vpn_table,
-        mock_peer_table,
-        mock_peer_history_table,
         mock_vpn_manager,
-        mock_dynamo_db,
+        mock_dynamodb,
         test_input,
     ):
         """Successfully add a connection to an existing VPN server"""
         # Set up Test - Get all VPN servers but don't hide secrets
-        vpn = test_input
+        vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn_router.vpn_manager = mock_vpn_manager
 
         if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
@@ -536,13 +536,15 @@ class TestVpnInterface:
             response = client.get(f"/vpn/{vpn.name}?hide_secrets=false")
             updated_vpn = VpnModel(**response.json())
             assert updated_vpn.connection_info == vpn.connection_info
-            all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+            all_vpns = mock_dynamodb._get_all_vpn_from_server()
             assert all_vpns == [test_input]
 
-    def test_delete_vpn(self, mock_vpn_table, mock_peer_table, mock_vpn_manager, mock_dynamo_db, test_input):
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_delete_vpn(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test deleting a VPN server"""
         # Set up Test
-        vpn = test_input
+        vpn = deepcopy(test_input)
+        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test - Delete the VPN server
@@ -559,5 +561,5 @@ class TestVpnInterface:
 
         # Validate Results
         assert response.status_code == 200
-        all_vpns = mock_dynamo_db._get_all_vpn_from_server()
+        all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == []

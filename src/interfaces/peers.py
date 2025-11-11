@@ -231,6 +231,13 @@ def import_vpn_peers(
             status_code=HTTPStatus.NOT_FOUND,
             detail="The information required to get data from the Wireguard Server has not been configured",
         )
+    elif vpn.connection_info.type is ConnectionType.SSM:
+        # Don't support peer import for SSM until issue #104 is resolved.
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Importing over SSM is not currently supported",
+        )
+
     import_vpn_peers_request.message = f"[{request.method} {request.url.path}] " + import_vpn_peers_request.message
     try:
         added_peers = vpn_manager.import_peers(
@@ -308,6 +315,7 @@ def get_peer_history_ip_address(
     Both start and end time are inclusive. If no start or end time is provided, the entire history will be returned. Returned results are sorted by time in descending order.
     """
     vpn_manager = peer_router.vpn_manager
+    validate_peer_exists(vpn_name, ip_address, vpn_manager)
     start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
@@ -346,6 +354,7 @@ def get_tag_history(
     Both start and end time are inclusive. If no start or end time is provided, the entire history will be returned. Results are grouped by peer and for each peer, results are sorted by time in descending order.
     """
     vpn_manager = peer_router.vpn_manager
+    validate_vpn_exists(vpn_name, vpn_manager)
     start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
