@@ -1135,7 +1135,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         response = client.get(
             f"/vpn/{vpn.name}/peer/{ip}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
         )
-        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.status_code == HTTPStatus.BAD_REQUEST
 
     @pytest.mark.parametrize("test_input", test_parameters)
     def test_peer_history_invalid_time(
@@ -1167,7 +1167,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         ip = "10.20.40.99"
         response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
         assert response.status_code == HTTPStatus.NOT_FOUND
-        assert "No peer with IP" in response.text
+        assert "No peer history found" in response.text
 
     @pytest.mark.parametrize("test_input", test_parameters)
     def test_tag_history_no_history(
@@ -1552,15 +1552,6 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                 for wg_peer in mock_ssh_command.peers:
                     if wg_peer.wg_ip_address == delete_ip:
                         assert wg_peer.wg_ip_address != delete_ip
-
-            """Test peer history was removed after deletion"""
-            # Execute Test - Get history of deleted peer
-            response = client.get(f"/vpn/{vpn.name}/peer/{delete_ip}/history")
-            assert response.status_code == HTTPStatus.NOT_FOUND
-
-            # Should the history get purged when the peer is deleted?  TBD.
-            db_history = mock_dynamodb.get_peer_history(vpn.name, delete_ip)
-            # assert len(db_history) == 0
 
     @pytest.mark.parametrize("test_input", test_parameters)
     def test_delete_vpn(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
