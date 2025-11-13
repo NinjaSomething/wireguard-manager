@@ -2,6 +2,8 @@ import urllib.parse
 from copy import deepcopy
 from http import HTTPStatus
 from unittest.mock import MagicMock, patch
+import boto3
+from moto import mock_aws
 
 import pytest
 from botocore.exceptions import ClientError
@@ -15,6 +17,7 @@ from models.ssm import SsmConnectionModel
 from models.vpn import VpnModel, VpnPutModel, WireguardModel
 from models.wg_server import WgServerModel
 from tests.helper import add_vpn
+from databases.dynamodb import DynamoDb
 
 
 app = WireguardManagerAPI()
@@ -559,3 +562,43 @@ class TestVpnInterface:
         assert response.status_code == 200
         all_vpns = mock_dynamodb._get_all_vpn_from_server()
         assert all_vpns == []
+
+    def test_vpn_initialization_failed(self, serverless_configuration):
+        """
+        Test the ClientError is uncaught when the service fails to initialize its data from the database during startup.
+        """
+        # Set up Test
+        with mock_aws():
+            table_config = serverless_configuration["WireguardManagerPeersTable"]["Properties"]
+            table_config["TableName"] = "wireguard-manager-peers-unittest"
+            conn = boto3.resource("dynamodb", region_name="us-west-2")
+            peer_table = conn.create_table(**table_config)
+
+            table_config = serverless_configuration["WireguardManagerPeersHistoryTable"]["Properties"]
+            table_config["TableName"] = "wireguard-manager-peers-history-unittest"
+            conn = boto3.resource("dynamodb", region_name="us-west-2")
+            peer_history_table = conn.create_table(**table_config)
+
+            # Execute Test
+            with pytest.raises(ClientError):
+                DynamoDb(environment="unittest", dynamodb_endpoint_url=None, aws_region="us-west-2")
+
+    def test_peer_initialization_failed(self, serverless_configuration):
+        """
+        Test the ClientError is uncaught when the service fails to initialize its data from the database during startup.
+        """
+        # Set up Test
+        with mock_aws():
+            table_config = serverless_configuration["WireguardManagerVpnServersTable"]["Properties"]
+            table_config["TableName"] = "wireguard-manager-vpn-servers-unittest"
+            conn = boto3.resource("dynamodb", region_name="us-west-2")
+            vpn_table = conn.create_table(**table_config)
+
+            table_config = serverless_configuration["WireguardManagerPeersHistoryTable"]["Properties"]
+            table_config["TableName"] = "wireguard-manager-peers-history-unittest"
+            conn = boto3.resource("dynamodb", region_name="us-west-2")
+            peer_history_table = conn.create_table(**table_config)
+
+            # Execute Test
+            with pytest.raises(ClientError):
+                DynamoDb(environment="unittest", dynamodb_endpoint_url=None, aws_region="us-west-2")
