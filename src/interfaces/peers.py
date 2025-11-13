@@ -315,7 +315,6 @@ def get_peer_history_ip_address(
     Both start and end time are inclusive. If no start or end time is provided, the entire history will be returned. Returned results are sorted by time in descending order.
     """
     vpn_manager = peer_router.vpn_manager
-    validate_peer_exists(vpn_name, ip_address, vpn_manager)
     start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
@@ -354,7 +353,6 @@ def get_tag_history(
     Both start and end time are inclusive. If no start or end time is provided, the entire history will be returned. Results are grouped by peer and for each peer, results are sorted by time in descending order.
     """
     vpn_manager = peer_router.vpn_manager
-    validate_vpn_exists(vpn_name, vpn_manager)
     start_time_ns = int(start_time.timestamp()) * 1_000_000_000 if start_time else None
     end_time_ns = int(end_time.timestamp()) * 1_000_000_000 if end_time else None
 
