@@ -165,7 +165,7 @@ def seed_history(
     )
 
     http_client.put(f"/vpn/{vpn.name}/peer/{peer1.ip_address}/tag/tag2", json={"message": "Add tag2"})
-    http_client.delete(f"/vpn/{vpn.name}/peer/{peer1.ip_address}/tag/tag2")
+    http_client.request("DELETE", f"/vpn/{vpn.name}/peer/{peer1.ip_address}/tag/tag2", json={"message": "Delete Tag2"})
     http_client.post(
         f"/vpn/{vpn.name}/peer/{peer1.ip_address}/generate-wireguard-keys", json={"message": "Generate new keys"}
     )

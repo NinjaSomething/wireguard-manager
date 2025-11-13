@@ -1230,7 +1230,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
             # Assert the entries are in descending order by timestamp
             assert all(a["timestamp"] >= b["timestamp"] for a, b in zip(history_records, history_records[1:]))
             if peer == peer1:
-                assert len(history_records) == 3
+                assert len(history_records) == 4
                 # Assert the expected messages exist in the history
                 for message in ["Generate new keys", "Add new peer"]:
                     assert any(message in d["message"] for d in history_records)
@@ -1313,6 +1313,39 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
                 # Assert the expected messages exist in the history
                 for message in ["Add second peer"]:
                     assert any(message in d["message"] for d in history_records)
+
+    @pytest.mark.parametrize("test_input", test_parameters)
+    def test_remove_tag_history(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
+        """Remove a tag from a peer."""
+        # Set up Test
+        vpn = test_input
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
+        peer_router.vpn_manager = mock_vpn_manager
+        peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
+        test_tag = "tag1"
+
+        # Execute Test
+        client.request(
+            "DELETE", f"/vpn/{vpn.name}/peer/{peer1.ip_address}/tag/{test_tag}", json={"message": "Sample message"}
+        )
+
+        # Validate Results
+        response = client.get(f"/vpn/{vpn.name}/peer/{peer1.ip_address}/history")
+        assert response.status_code == 200
+        ip_data = response.json()
+        assert len(ip_data) == 5
+
+        # Verify the latest history entry has the tag removed, but prior entries are intact
+        assert test_tag not in PeerHistoryResponseModel(**ip_data[0]).tags
+        assert all([test_tag in peer_history["tags"] for peer_history in ip_data[1:]])
+
+        response = client.get(f"/vpn/{vpn.name}/tag/{test_tag}/history")
+        assert response.status_code == 200
+        tag_data = response.json()
+
+        # Verify only the history with the tag is returned for peer1.
+        assert len(tag_data[peer1.ip_address]) == 4
+        assert all([test_tag in peer_history["tags"] for peer_history in tag_data[peer1.ip_address]])
 
     @pytest.mark.parametrize("test_input", test_parameters)
     def test_update_peer_server_not_exist(self, mock_vpn_manager, test_input):
