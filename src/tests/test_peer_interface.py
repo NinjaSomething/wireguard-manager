@@ -13,6 +13,7 @@ from auth import WireguardManagerAPI
 from interfaces.peers import peer_router
 from models.connection import ConnectionModel, ConnectionType
 from models.peers import PeerRequestModel, PeerResponseModel
+from models.peer_history import PeerHistoryResponseModel
 from models.ssh import SshConnectionModel
 from models.ssm import SsmConnectionModel
 from models.vpn import VpnModel, WireguardModel
@@ -111,7 +112,7 @@ class TestPeerInterface:
         """Try adding a peer to a server using an IP in a different subnet."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         peer_config = PeerRequestModel(
             ip_address="10.20.41.2",
@@ -146,7 +147,7 @@ class TestPeerInterface:
         """Try adding a peer successfully."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         mock_ssh_command.server = WgServerModel(
@@ -213,7 +214,7 @@ class TestPeerInterface:
         """Try adding peer using an existing IP address"""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -242,7 +243,7 @@ class TestPeerInterface:
         """Try adding peer using an existing public key"""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -271,7 +272,7 @@ class TestPeerInterface:
         """Try getting all peers."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -302,7 +303,7 @@ class TestPeerInterface:
         """Try getting all peers.  Don't hide the secrets"""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -357,7 +358,7 @@ class TestPeerInterface:
         """Try to get a peer but the peer doesn't exist."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -371,7 +372,7 @@ class TestPeerInterface:
         """Try getting a peer.  Don't hide the secrets."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -400,7 +401,7 @@ class TestPeerInterface:
         """Try getting a peer but hide the secrets."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -442,7 +443,7 @@ class TestPeerInterface:
         """Try to get a peer config but the peer doesn't exist."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -455,7 +456,7 @@ class TestPeerInterface:
     def test_get_peer_config(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Try getting a peer config."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Inject existing peer
@@ -510,7 +511,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try to generate new peer keys but the peer doesn't exist."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -540,7 +541,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try generating a new key-pair for a peer."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -616,7 +617,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
         mock_codecs.encode.side_effect = ["GENERATED_PRIVATE_KEY2".encode(), "GENERATED_PUBLIC_KEY2".encode()]
@@ -691,7 +692,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try to add a tag but the peer doesn't exist."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -705,7 +706,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Add a tag to a peer."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -739,7 +740,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try adding the same tag again.  This validates that it is idempotent."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -788,7 +789,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try to remove a tag but the peer doesn't exist."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -804,7 +805,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Remove a tag from a peer."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -840,7 +841,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Remove a tag that does not exist to validate it is idempotent."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -892,7 +893,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try to get a peer by tag but no peers match."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -907,7 +908,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     def test_get_peer_by_tag(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Try getting a peer by tag. Don't hide the secrets."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
         # Inject a second peer
@@ -958,7 +959,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Try getting a peer by tag but hide the secrets."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         new_peer = add_peer(vpn, mock_dynamodb)  # Inject existing peer
         # Inject a second peer
@@ -1033,7 +1034,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Importing peers from the wireguard server."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
 
@@ -1114,7 +1115,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try to delete a peer by tag but no peers match.  This also validates that it is idempotent."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -1143,7 +1144,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Test peer history endpoint with invalid start/end time."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
         ip = "10.20.40.2"
@@ -1162,7 +1163,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Test peer history endpoint when there is no peer."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         ip = "10.20.40.99"
         response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
@@ -1175,7 +1176,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Test tag history endpoint when there is no history."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
         tag = "nope"
@@ -1188,7 +1189,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     def test_peer_history_all(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test peer history endpoint returns all history."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
 
@@ -1210,7 +1211,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     def test_tag_history_all(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         """Test peer history endpoint returns all history."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
         tag = "tag1"
@@ -1245,7 +1246,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Test peer history endpoint returns all history."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
 
         peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
@@ -1276,7 +1277,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Test peer history endpoint returns all history."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         peer1, peer2 = seed_history(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command, client)
         tag = "tag1"
@@ -1353,7 +1354,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Try updating a peer that doesn't exist.  This should add the peer."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         expected_peer_config = PeerRequestModel(
             ip_address="10.20.40.4",
@@ -1432,7 +1433,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Update a peer.  Update the allowed IPs, public key, private key, persistent keepalive, and tags."""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
         expected_peer_config = PeerRequestModel(
@@ -1511,7 +1512,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
     ):
         """Delete a peer."""
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         peer_router.vpn_manager = mock_vpn_manager
         add_peer(vpn, mock_dynamodb)  # Inject existing peer
         delete_ips = ["10.20.40.2", "10.20.40.3"]
@@ -1558,7 +1559,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         """Test deleting a VPN server"""
         # Set up Test
         vpn = test_input
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test - Delete the VPN server

@@ -249,7 +249,7 @@ class TestVpnInterface:
         """Try adding a VPN server vpn with a name that already exists"""
         # Set up Test
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn.wireguard.ip_address = "10.20.40.2"  # Change IP address to avoid conflict
         vpn.wireguard.public_key = "DIFFERENT_KEY"
         vpn_config = VpnPutModel(
@@ -275,7 +275,7 @@ class TestVpnInterface:
         """Try adding an VPN server that already exists using the same private key"""
         # Set up Test
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn.wireguard.ip_address = "10.20.40.2"  # Change IP address to avoid conflict
         vpn.name = "DIFFERENT_NAME"
         vpn_config = VpnPutModel(
@@ -298,7 +298,7 @@ class TestVpnInterface:
         """Test getting a single VPN server"""
         # Set up Test - Get the VPN server.  Don't hide secrets
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -333,7 +333,7 @@ class TestVpnInterface:
         """Test Getting all VPN servers"""
         # Set up Test - Get all VPN servers but don't hide secrets
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test
@@ -365,7 +365,7 @@ class TestVpnInterface:
     def test_delete_connection(self, mock_ssm_command, mock_ssh_command, mock_dynamodb, mock_vpn_manager, test_input):
         # Set up Test - Get all VPN servers but don't hide secrets
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn_router.vpn_manager = mock_vpn_manager
 
         if vpn.connection_info is not None:
@@ -399,9 +399,7 @@ class TestVpnInterface:
         if test_input.connection_info is not None:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
-            add_vpn(
-                expected_vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router
-            )
+            add_vpn(expected_vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
 
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 mock_ssh_command.server = WgServerModel(
@@ -460,9 +458,7 @@ class TestVpnInterface:
         if test_input.connection_info is not None:
             expected_vpn = deepcopy(test_input)
             expected_vpn.connection_info = None
-            add_vpn(
-                expected_vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router
-            )
+            add_vpn(expected_vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
             vpn_router.vpn_manager = mock_vpn_manager
             if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
                 ssh_client = mock_ssh_client()
@@ -510,7 +506,7 @@ class TestVpnInterface:
         """Successfully add a connection to an existing VPN server"""
         # Set up Test - Get all VPN servers but don't hide secrets
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn_router.vpn_manager = mock_vpn_manager
 
         if test_input.connection_info and test_input.connection_info.type == ConnectionType.SSH:
@@ -544,7 +540,7 @@ class TestVpnInterface:
         """Test deleting a VPN server"""
         # Set up Test
         vpn = deepcopy(test_input)
-        add_vpn(vpn, mock_vpn_manager, mock_dynamodb, mock_ssm_command, mock_ssh_command, client, vpn_router)
+        add_vpn(vpn, mock_dynamodb, mock_ssm_command, mock_ssh_command)
         vpn_router.vpn_manager = mock_vpn_manager
 
         # Execute Test - Delete the VPN server
