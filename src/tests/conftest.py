@@ -54,21 +54,21 @@ def incr_time_ns():
 def mock_dynamodb(serverless_configuration):
     with mock_aws():
         table_config = serverless_configuration["WireguardManagerVpnServersTable"]["Properties"]
-        table_config["TableName"] = "wireguard-manager-vpn-servers-test"
+        table_config["TableName"] = "wireguard-manager-vpn-servers-unittest"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         vpn_table = conn.create_table(**table_config)
 
         table_config = serverless_configuration["WireguardManagerPeersTable"]["Properties"]
-        table_config["TableName"] = "wireguard-manager-peers-test"
+        table_config["TableName"] = "wireguard-manager-peers-unittest"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         peer_table = conn.create_table(**table_config)
 
         table_config = serverless_configuration["WireguardManagerPeersHistoryTable"]["Properties"]
-        table_config["TableName"] = "wireguard-manager-peers-history-test"
+        table_config["TableName"] = "wireguard-manager-peers-history-unittest"
         conn = boto3.resource("dynamodb", region_name="us-west-2")
         peer_history_table = conn.create_table(**table_config)
 
-        yield DynamoDb(environment="test", dynamodb_endpoint_url=None, aws_region="us-west-2")
+        yield DynamoDb(environment="unittest", dynamodb_endpoint_url=None, aws_region="us-west-2")
 
 
 @pytest.fixture(scope="function")
