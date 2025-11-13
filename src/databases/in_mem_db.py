@@ -57,20 +57,20 @@ class InMemoryDataStore(AbstractDatabase):
         if name in self._vpn_networks:
             del self._vpn_networks[name]
 
-    def add_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
+    def add_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
         """Add a new peer to the database."""
         if peer in self._vpn_peers[vpn_name]:
             raise ValueError("Duplicate peer")
         self._vpn_peers[vpn_name].append(peer)
 
-    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, **kwargs):
+    def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, changed_by: str):
         """Update an existing peer in the database."""
         old_peer = self.get_peer(vpn_name, updated_peer.ip_address)
         if old_peer is not None:
             self._vpn_peers[vpn_name].remove(old_peer)
         self._vpn_peers[vpn_name].append(updated_peer)
 
-    def delete_peer(self, vpn_name: str, peer: PeerDbModel, **kwargs):
+    def delete_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
         if vpn_name in self._vpn_peers:
             for in_memory_peer in self._vpn_peers[vpn_name]:
                 if in_memory_peer.ip_address == peer.ip_address:
