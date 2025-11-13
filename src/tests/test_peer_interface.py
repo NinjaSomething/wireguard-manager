@@ -1135,7 +1135,7 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         response = client.get(
             f"/vpn/{vpn.name}/peer/{ip}/history", params={"start_time": start.isoformat(), "end_time": end.isoformat()}
         )
-        assert response.status_code == HTTPStatus.OK
+        assert response.status_code == HTTPStatus.BAD_REQUEST
 
     @pytest.mark.parametrize("test_input", test_parameters)
     def test_peer_history_invalid_time(
@@ -1166,8 +1166,8 @@ PersistentKeepalive = {expected_peer.persistent_keepalive}"""
         peer_router.vpn_manager = mock_vpn_manager
         ip = "10.20.40.99"
         response = client.get(f"/vpn/{vpn.name}/peer/{ip}/history")
-        assert response.status_code == HTTPStatus.OK
-        assert "No peer with IP" in response.text
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert "No peer history found" in response.text
 
     @pytest.mark.parametrize("test_input", test_parameters)
     def test_tag_history_no_history(
