@@ -132,11 +132,14 @@ class VpnManager:
             raise ValueError(f"Address space [{peer_allowed_ip}] is too large. Allowed IPs must be /16 or smaller.")
         set(ipaddress.ip_network(peer_allowed_ip).hosts())
 
-    def add_peer(self, vpn_name: str, peer: PeerRequestModel, changed_by: str) -> None:
+    def add_peer(self, vpn_name: str, peer: PeerRequestModel, changed_by: str, importing: bool = False) -> None:
         """
         This will add the peer to the database.
         :param vpn_name: The name of the VPN to add the peer to.
         :param peer: The PeerRequestModel containing the peer details.
+        :param changed_by: The user making the change.
+        :param importing: True if the peer is being imported from the wireguard server.  We don't want to update the
+            wireguard server again in this case.
         :raises ConnectionException: If there is an error connecting to the VPN server
         :raises ConflictException: If the IP address or public key is already being used
         :raises BadRequestException: If the peer's allowed IPs is a larger address space than the one on the VPN server
@@ -168,7 +171,8 @@ class VpnManager:
         for allowed_ip in peer.allowed_ips:
             self.validate_ip_network(vpn_name, allowed_ip)
 
-        if vpn.connection_info is not None:
+        # Don't make changes to the wireguard server if we are importing peers or if there is no connection info
+        if not importing and vpn.connection_info is not None:
             server_manager = server_manager_factory(vpn.connection_info.type)
             server_manager.add_peer(vpn, peer)
 
@@ -303,7 +307,7 @@ class VpnManager:
                     skip_peer = True
 
             if not skip_peer:
-                self.add_peer(vpn_name, import_peer, changed_by)
+                self.add_peer(vpn_name, import_peer, changed_by, importing=True)
                 added_peers.append(import_peer)
 
         return added_peers
