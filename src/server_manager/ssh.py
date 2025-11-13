@@ -74,7 +74,7 @@ class SshConnection(AbstractServerManager):
             result = wg_dump_response
         return result
 
-    def remove_peer(self, vpn: VpnModel, peer: PeerDbModel):
+    def remove_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Remove a peer from the VPN server"""
         cmd_to_execute = (
             f"sudo wg set {vpn.wireguard.interface} peer {peer.public_key} remove && sudo wg-quick save wg0"

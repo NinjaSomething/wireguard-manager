@@ -30,7 +30,7 @@ class AbstractServerManager(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def remove_peer(self, vpn: VpnModel, peer: PeerDbModel):
+    def remove_peer(self, vpn: VpnModel, peer: PeerRequestModel):
         """Remove a peer from the VPN server"""
         pass
 
