@@ -10,10 +10,18 @@ from botocore.exceptions import ClientError, ParamValidationError
 from pydantic import BaseModel, ValidationError, field_validator
 
 from databases.in_mem_db import InMemoryDataStore
-from interfaces.peers import update_peer
 from models.connection import ConnectionModel, ConnectionType, build_wireguard_connection_model
 from models.peers import PeerDbModel
 from models.vpn import VpnModel, WireguardModel
+from models.exceptions import (
+    DynamoUpdatePeerException,
+    DynamoAddPeerException,
+    DynamoUpdateConnectionInfoException,
+    DynamoDeletePeerException,
+    DynamoDeleteVpnException,
+    DynamoAddVpnException,
+    DynamoRecordHistoryException,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +46,7 @@ class PeerBaseModel(BaseModel):
     public_key: str
     private_key: Optional[str] = None
     persistent_keepalive: int
-    allowed_ips: list[str]
+    allowed_ips: list[str] | str
     tags: list[str] = []
 
     @field_validator("allowed_ips", mode="before")
@@ -138,100 +146,190 @@ class DynamoDb(InMemoryDataStore):
 
     def add_vpn(self, new_vpn: VpnModel):
         """Add a new VPN network to the database.  If it already exists, raise a ValueError exception."""
-        vpn_dynamo = VpnDynamoModel(
-            name=new_vpn.name,
-            description=new_vpn.description,
-            wireguard_ip_address=new_vpn.wireguard.ip_address,
-            wireguard_ip_network=new_vpn.wireguard.ip_network,
-            wireguard_interface=new_vpn.wireguard.interface,
-            wireguard_public_key=new_vpn.wireguard.public_key,
-            wireguard_private_key=new_vpn.wireguard.private_key,
-            wireguard_listen_port=new_vpn.wireguard.listen_port,
-            connection_info=new_vpn.connection_info.model_dump() if new_vpn.connection_info else None,
-        )
-        if new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSH:
-            # Get the secret value for the SSH key and password
-            vpn_dynamo.connection_info["data"]["key"] = new_vpn.connection_info.data.key
-            if new_vpn.connection_info.data.key_password is not None:
-                vpn_dynamo.connection_info["data"]["key_password"] = new_vpn.connection_info.data.key_password
-        elif new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSM:
-            # Get the secret value for the AWS aws_access_key_id and aws_secret_access_key
-            vpn_dynamo.connection_info["data"]["aws_access_key_id"] = new_vpn.connection_info.data.aws_access_key_id
-            vpn_dynamo.connection_info["data"][
-                "aws_secret_access_key"
-            ] = new_vpn.connection_info.data.aws_secret_access_key
+        try:
+            vpn_dynamo = VpnDynamoModel(
+                name=new_vpn.name,
+                description=new_vpn.description,
+                wireguard_ip_address=new_vpn.wireguard.ip_address,
+                wireguard_ip_network=new_vpn.wireguard.ip_network,
+                wireguard_interface=new_vpn.wireguard.interface,
+                wireguard_public_key=new_vpn.wireguard.public_key,
+                wireguard_private_key=new_vpn.wireguard.private_key,
+                wireguard_listen_port=new_vpn.wireguard.listen_port,
+                connection_info=new_vpn.connection_info.model_dump() if new_vpn.connection_info else None,
+            )
+            if new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSH:
+                # Get the secret value for the SSH key and password
+                vpn_dynamo.connection_info["data"]["key"] = new_vpn.connection_info.data.key
+                if new_vpn.connection_info.data.key_password is not None:
+                    vpn_dynamo.connection_info["data"]["key_password"] = new_vpn.connection_info.data.key_password
+            elif new_vpn.connection_info is not None and new_vpn.connection_info.type == ConnectionType.SSM:
+                # Get the secret value for the AWS aws_access_key_id and aws_secret_access_key
+                vpn_dynamo.connection_info["data"]["aws_access_key_id"] = new_vpn.connection_info.data.aws_access_key_id
+                vpn_dynamo.connection_info["data"][
+                    "aws_secret_access_key"
+                ] = new_vpn.connection_info.data.aws_secret_access_key
+        except Exception as err:
+            # This will trigger a rollback in the event we introduce a regression here.  It is intentionally broad.
+            msg = f"Failed to add VPN {new_vpn.name} in DynamoDB: {err}"
+            raise DynamoAddVpnException(msg)
 
-        self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
-        # TODO: Handle failure response
+        try:
+            self.vpn_table.put_item(Item=vpn_dynamo.model_dump())
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
+
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            msg = f"Failed to add VPN {new_vpn.name} in DynamoDB: {err}"
+            raise DynamoAddVpnException(msg)
+
         super().add_vpn(new_vpn)  # Add the VPN to the in-memory datastore
 
     def delete_vpn(self, name: str):
         """Remove a VPN network from the database."""
-        self.vpn_table.delete_item(Key={"name": name})
-        # TODO: Handle failure response
+        try:
+            self.vpn_table.delete_item(Key={"name": name})
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
+
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            msg = f"Failed to delete VPN {name} in DynamoDB: {err}"
+            raise DynamoDeleteVpnException(msg)
+
         super().delete_vpn(name)  # Remove the VPN from the in-memory datastore
 
     def add_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
-        peer_dynamo = PeerDynamoModel(
-            vpn_name=vpn_name,
-            peer_id=peer.peer_id,
-            ip_address=peer.ip_address,
-            public_key=peer.public_key,
-            private_key=peer.private_key if peer.private_key else None,
-            persistent_keepalive=peer.persistent_keepalive,
-            allowed_ips=",".join(peer.allowed_ips),
-            tags=peer.tags,
-        )
-        self.peer_table.put_item(Item=peer_dynamo.model_dump())
-        # TODO: Handle failure response
+        try:
+            peer_dynamo = PeerDynamoModel(
+                vpn_name=vpn_name,
+                peer_id=peer.peer_id,
+                ip_address=peer.ip_address,
+                public_key=peer.public_key,
+                private_key=peer.private_key if peer.private_key else None,
+                persistent_keepalive=peer.persistent_keepalive,
+                allowed_ips=",".join(peer.allowed_ips),
+                tags=peer.tags,
+            )
+        except Exception as err:
+            # This will trigger a rollback in the event we introduce a regression here.  It is intentionally broad.
+            msg = f"Failed to add peer {peer.ip_address} [{peer.peer_id}] in DynamoDB: {err}"
+            raise DynamoAddPeerException(msg)
+
+        try:
+            self.peer_table.put_item(Item=peer_dynamo.model_dump())
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
+
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            msg = f"Failed to add peer {peer.ip_address} [{peer.peer_id}] in DynamoDB: {err}"
+            raise DynamoAddPeerException(msg)
+
         # Add the peer to the in-memory datastore
         super().add_peer(vpn_name, peer, changed_by)
 
         # Write the peer history
-        self.write_peers_history(vpn_name, peer, changed_by)
+        try:
+            self.write_peers_history(vpn_name, peer, changed_by)
+        except DynamoRecordHistoryException as err:
+            # Don't raise an exception here.  Failing to record the history doesn't need to trigger a rollback.
+            log.error(
+                f"Failed to record the deletion history for {peer.ip_address} [{peer.message}] in DynamoDB: {err}"
+            )
 
     def delete_peer(self, vpn_name: str, peer: PeerDbModel, changed_by: str):
-        # Prevent overwriting original object, in case it's reused later
-        temp_peer = deepcopy(peer)
-        temp_peer.allowed_ips = ""
-        temp_peer.public_key = ""
-        temp_peer.private_key = None
-        temp_peer.persistent_keepalive = 0
-        # Write history before deleting
-        self.write_peers_history(vpn_name, temp_peer, changed_by)
+        try:
+            # Prevent overwriting original object, in case it's reused later
+            temp_peer = deepcopy(peer)
+            temp_peer.allowed_ips = ""
+            temp_peer.public_key = ""
+            temp_peer.private_key = None
+            temp_peer.persistent_keepalive = 0
+            # Write history before deleting
+            self.write_peers_history(vpn_name, temp_peer, changed_by)
+        except DynamoRecordHistoryException as err:
+            # Don't raise an exception here.  Failing to record the history doesn't need to trigger a rollback.
+            log.error(
+                f"Failed to record the deletion history for {peer.ip_address} [{peer.message}] in DynamoDB: {err}"
+            )
 
         # Delete the peer from the DynamoDB table
-        self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
-        # TODO: Handle failure response
+        try:
+            self.peer_table.delete_item(Key={"peer_id": peer.peer_id})
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
+
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            msg = f"Failed to delete peer {peer.ip_address} [{peer.peer_id}] in DynamoDB: {err}"
+            raise DynamoDeletePeerException(msg)
+
         # Remove the peer from the in-memory datastore
         super().delete_peer(vpn_name, peer, changed_by)
 
     def update_peer(self, vpn_name: str, updated_peer: PeerDbModel, changed_by: str):
         """Update an existing peer."""
         # Update the peer in the DynamoDB table
-        response = self.peer_table.update_item(
-            Key={"peer_id": updated_peer.peer_id},
-            UpdateExpression="set tags=:newTags, allowed_ips=:newAllowedIps, public_key=:newPublicKey, private_key=:newPrivateKey, persistent_keepalive=:newPersistentKeepalive",
-            ExpressionAttributeValues={
-                ":newTags": updated_peer.tags,
-                ":newAllowedIps": updated_peer.allowed_ips,
-                ":newPublicKey": updated_peer.public_key,
-                ":newPrivateKey": updated_peer.private_key,
-                ":newPersistentKeepalive": updated_peer.persistent_keepalive,
-            },
-            ReturnValues="UPDATED_NEW",
-        )
-        log.info(f"Updated peer in DynamoDB: {response['Attributes']}")
-        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
-            msg = f"Failed to update peer {update_peer.ip_address} [{update_peer.peer_id}] in DynamoDB: {response}"
-            log.error(msg)
-            # TODO: Handle failure response
+        try:
+            response = self.peer_table.update_item(
+                Key={"peer_id": updated_peer.peer_id},
+                UpdateExpression="set tags=:newTags, allowed_ips=:newAllowedIps, public_key=:newPublicKey, private_key=:newPrivateKey, persistent_keepalive=:newPersistentKeepalive",
+                ExpressionAttributeValues={
+                    ":newTags": updated_peer.tags,
+                    ":newAllowedIps": updated_peer.allowed_ips,
+                    ":newPublicKey": updated_peer.public_key,
+                    ":newPrivateKey": updated_peer.private_key,
+                    ":newPersistentKeepalive": updated_peer.persistent_keepalive,
+                },
+                ReturnValues="UPDATED_NEW",
+            )
+            log.info(f"Updated peer in DynamoDB: {response.get('Attributes')}")
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
+
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            msg = f"Failed to update peer {updated_peer.ip_address} [{updated_peer.peer_id}] in DynamoDB: {err}"
+            raise DynamoUpdatePeerException(msg)
 
         # Update the in-memory datastore
         super().update_peer(vpn_name, updated_peer, changed_by)
 
         # Write the peer history
-        self.write_peers_history(vpn_name, updated_peer, changed_by)
+        try:
+            self.write_peers_history(vpn_name, updated_peer, changed_by)
+        except DynamoRecordHistoryException as err:
+            # Don't raise an exception here.  Failing to record the history doesn't need to trigger a rollback.
+            log.error(
+                f"Failed to record the deletion history for {updated_peer.ip_address} [{updated_peer.message}] in DynamoDB: {err}"
+            )
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel):
         """Update the connection info"""
@@ -244,18 +342,26 @@ class DynamoDb(InMemoryDataStore):
                 if connection_info.data.key_password is not None:
                     connection_info_dict["data"]["key_password"] = connection_info.data.key_password
 
-        response = self.vpn_table.update_item(
-            Key={"name": vpn_name},
-            UpdateExpression="set connection_info=:newConnectionInfo",
-            ExpressionAttributeValues={":newConnectionInfo": connection_info_dict},
-            ReturnValues="UPDATED_NEW",
-        )
-        log.info(f"Updated connection_info in DynamoDB: {response['Attributes']}")
-        if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
-            msg = f"Failed to update connection info in DynamoDB: {response}"
-            log.error(msg)
-            # TODO: Handle failure response
+        try:
+            response = self.vpn_table.update_item(
+                Key={"name": vpn_name},
+                UpdateExpression="set connection_info=:newConnectionInfo",
+                ExpressionAttributeValues={":newConnectionInfo": connection_info_dict},
+                ReturnValues="UPDATED_NEW",
+            )
+            log.info(f"Updated connection_info in DynamoDB: {response.get('Attributes')}")
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
 
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            msg = f"Failed to update connection info in dynamodb {vpn_name}: {err}"
+            raise DynamoUpdateConnectionInfoException(msg)
         super().update_connection_info(vpn_name, connection_info)  # Update the in-memory datastore
 
     def write_peer_history_db(self, peer: PeerHistoryDynamoModel):
@@ -265,19 +371,17 @@ class DynamoDb(InMemoryDataStore):
         item = peer.model_dump()
         try:
             self.peer_history_table.put_item(Item=item)
-        except ParamValidationError as e:
-            # e.g. invalid types or missing required fields
-            log.exception("Invalid item payload for DynamoDB: %r", item)
-            raise ValueError("Peer model has invalid data") from e
-        except ClientError as e:
-            code = e.response["Error"]["Code"]
-            msg = e.response["Error"]["Message"]
-            log.error("DynamoDB ClientError %s: %s", code, msg)
-            raise
-        except Exception:
-            # catch anything else (network issue, etc.)
-            log.exception("Unexpected error writing to DynamoDB")
-            raise
+        except ClientError as err:
+            log.error("Error Code: {}".format(err.response["Error"]["Code"]))
+            log.error("Error Message: {}".format(err.response["Error"]["Message"]))
+            log.error("Http Code: {}".format(err.response["ResponseMetadata"]["HTTPStatusCode"]))
+            log.error("Request ID: {}".format(err.response["ResponseMetadata"]["RequestId"]))
+
+            if err.response["Error"]["Code"] in ("ProvisionedThroughputExceededException", "ThrottlingException"):
+                log.warning("Received a throttle")
+            elif err.response["Error"]["Code"] == "InternalServerError":
+                log.error("Received a server error")
+            raise DynamoRecordHistoryException(err)
 
     def dedupe_history(self, peers_history: list[PeerHistoryDynamoModel]) -> list[PeerHistoryDynamoModel]:
         """

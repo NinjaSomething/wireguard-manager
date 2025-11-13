@@ -20,7 +20,7 @@ from models.peers import (
     PeerUpdateRequestModel,
 )
 from server_manager import ConnectionException
-from vpn_manager import BadRequestException, ConflictException, VpnUpdateException
+from vpn_manager import BadRequestException, ConflictException, PeerUpdateException
 
 log = logging.getLogger(__name__)
 peer_router = WgAPIRouter()
@@ -132,6 +132,8 @@ def add_peer(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConflictException as ex:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(ex))
+    except PeerUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
 
     return PeerResponseModel(**peer.model_dump())
 
@@ -159,6 +161,8 @@ def update_peer(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(ex))
     except ConflictException as ex:
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(ex))
+    except PeerUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
 
     return PeerResponseModel(**peer.model_dump(), ip_address=ip_address)
 
@@ -183,6 +187,8 @@ def delete_peer(
         )
     except ConnectionException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
+    except PeerUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return Response(status_code=HTTPStatus.OK)
 
 
@@ -209,7 +215,9 @@ def generate_new_wireguard_keys(
             message=peer_generate_keys_request.message,
         )
     except ConnectionException as ex:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=ex)
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
+    except PeerUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
 
     peer_response = PeerResponseModel(**updated_peer.model_dump())
     peer_response.opaque = False  # Hide secrets in the response
@@ -245,7 +253,7 @@ def import_vpn_peers(
             changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
             message=import_vpn_peers_request.message,
         )
-    except VpnUpdateException as ex:
+    except PeerUpdateException as ex:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex) + " Aborting import.")
     return [PeerResponseModel(**peer.model_dump()) for peer in added_peers]
 
@@ -264,13 +272,16 @@ def add_tag_to_peer(
     vpn_manager = peer_router.vpn_manager
     validate_peer_exists(vpn_name, ip_address, vpn_manager)
     add_tag_to_peer_request.message = f"[{request.method} {request.url.path}] " + add_tag_to_peer_request.message
-    vpn_manager.add_tag_to_peer(
-        vpn_name=vpn_name,
-        peer_ip=ip_address,
-        tag=tag,
-        changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-        message=add_tag_to_peer_request.message,
-    )
+    try:
+        vpn_manager.add_tag_to_peer(
+            vpn_name=vpn_name,
+            peer_ip=ip_address,
+            tag=tag,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message=add_tag_to_peer_request.message,
+        )
+    except PeerUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 
 
@@ -290,13 +301,16 @@ def delete_tag_from_peer(
     delete_tag_from_peer_request.message = (
         f"[{request.method} {request.url.path}] " + delete_tag_from_peer_request.message
     )
-    vpn_manager.delete_tag_from_peer(
-        vpn_name=vpn_name,
-        peer_ip=ip_address,
-        tag=tag,
-        changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
-        message=delete_tag_from_peer_request.message,
-    )
+    try:
+        vpn_manager.delete_tag_from_peer(
+            vpn_name=vpn_name,
+            peer_ip=ip_address,
+            tag=tag,
+            changed_by=request.state.user if hasattr(request.state, "user") else "unknown",
+            message=delete_tag_from_peer_request.message,
+        )
+    except PeerUpdateException as ex:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(ex))
     return PeerResponseModel(**vpn_manager.get_peers_by_ip(vpn_name=vpn_name, ip_address=ip_address).model_dump())
 
 
