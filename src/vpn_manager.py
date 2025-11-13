@@ -3,6 +3,7 @@ import codecs
 import ipaddress
 import logging
 import typing
+from copy import deepcopy
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import serialization
@@ -12,6 +13,14 @@ from databases.interface import AbstractDatabase
 from models.connection import ConnectionModel, ConnectionType
 from models.peers import PeerDbModel, PeerRequestModel
 from models.vpn import VpnModel, VpnPutModel
+from models.exceptions import (
+    DynamoUpdatePeerException,
+    DynamoAddPeerException,
+    DynamoUpdateConnectionInfoException,
+    DynamoDeletePeerException,
+    DynamoAddVpnException,
+    DynamoDeleteVpnException,
+)
 from server_manager import server_manager_factory
 
 if typing.TYPE_CHECKING:
@@ -24,6 +33,12 @@ log = logging.getLogger(__name__)
 
 class VpnUpdateException(Exception):
     """Custom exception for VPN update errors."""
+
+    pass
+
+
+class PeerUpdateException(Exception):
+    """Custom exception for Peer update errors."""
 
     pass
 
@@ -70,7 +85,10 @@ class VpnManager:
                 f"IP address {vpn_request.wireguard.ip_address} is not in the address space "
                 f"{vpn_request.wireguard.ip_network}."
             )
-        self._db_manager.add_vpn(_vpn)
+        try:
+            self._db_manager.add_vpn(_vpn)
+        except DynamoAddVpnException as ex:
+            raise VpnUpdateException(ex)
 
         # Keep the manager aligned with the wireguard server.  Import existing peers.
         # Don't automate peer import for SSM until issue #104 is resolved.
@@ -86,7 +104,10 @@ class VpnManager:
     def remove_vpn(self, name: str):
         _vpn = self.get_vpn(name)
         if _vpn is not None:
-            self._db_manager.delete_vpn(name)
+            try:
+                self._db_manager.delete_vpn(name)
+            except DynamoDeleteVpnException as ex:
+                raise VpnUpdateException(ex)
 
     def update_connection_info(self, vpn_name: str, connection_info: ConnectionModel | None):
         # Validate the SSH connection info works
@@ -96,7 +117,10 @@ class VpnManager:
             success, wg_config_data = server_manager.test_interface_config(_vpn.wireguard.interface, connection_info)
             if not success:
                 raise KeyError(f"SSH information for VPN {vpn_name} failed: {wg_config_data}")
-        self._db_manager.update_connection_info(vpn_name, connection_info)
+        try:
+            self._db_manager.update_connection_info(vpn_name, connection_info)
+        except DynamoUpdateConnectionInfoException as ex:
+            raise VpnUpdateException(ex)
 
     @staticmethod
     def all_ip_addresses(ip_network: str) -> list[str]:
@@ -176,11 +200,18 @@ class VpnManager:
             server_manager = server_manager_factory(vpn.connection_info.type)
             server_manager.add_peer(vpn, peer)
 
-        self._db_manager.add_peer(
-            vpn_name=vpn_name, peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())), changed_by=changed_by
-        )
+        try:
+            self._db_manager.add_peer(
+                vpn_name=vpn_name, peer=PeerDbModel(**peer.model_dump(), peer_id=str(uuid4())), changed_by=changed_by
+            )
+        except DynamoAddPeerException as ex:
+            #  If not importing peers from the server itself, rollback changes made on the wireguard server
+            if not importing and vpn.connection_info is not None:
+                server_manager = server_manager_factory(vpn.connection_info.type)
+                server_manager.remove_peer(vpn, peer)
+            raise PeerUpdateException(ex)
 
-    def update_peer(self, vpn_name: str, updated_peer: PeerRequestModel, changed_by: str) -> PeerDbModel:
+    def update_peer(self, vpn_name: str, updated_peer: PeerRequestModel, changed_by: str) -> PeerRequestModel:
         existing_peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=updated_peer.ip_address)
         if not existing_peer:
             self.add_peer(vpn_name, updated_peer, changed_by)
@@ -190,17 +221,30 @@ class VpnManager:
             elif updated_peer.private_key is None:
                 updated_peer.private_key = existing_peer.private_key
 
-            if existing_peer.public_key != updated_peer.public_key:
-                vpn = self.get_vpn(vpn_name)
-                if vpn.connection_info is not None:
-                    server_manager = server_manager_factory(vpn.connection_info.type)
-                    server_manager.remove_peer(vpn, existing_peer)
-                    server_manager.add_peer(vpn, updated_peer)
-            self._db_manager.update_peer(
-                vpn_name=vpn_name,
-                updated_peer=PeerDbModel(**updated_peer.model_dump(), peer_id=existing_peer.peer_id),
-                changed_by=changed_by,
-            )
+            vpn = self.get_vpn(vpn_name)
+            if vpn.connection_info is not None:
+                server_manager = server_manager_factory(vpn.connection_info.type)
+            else:
+                server_manager = None
+
+            if existing_peer.public_key != updated_peer.public_key and server_manager is not None:
+                server_manager.remove_peer(vpn, existing_peer)
+                server_manager.add_peer(vpn, updated_peer)
+
+            try:
+                self._db_manager.update_peer(
+                    vpn_name=vpn_name,
+                    updated_peer=PeerDbModel(**updated_peer.model_dump(), peer_id=existing_peer.peer_id),
+                    changed_by=changed_by,
+                )
+            except DynamoUpdatePeerException as ex:
+                # Rollback changes made on the wireguard server
+                if server_manager is not None:
+                    if existing_peer.public_key != updated_peer.public_key:
+                        server_manager.remove_peer(vpn, updated_peer)
+                        server_manager.add_peer(vpn, existing_peer)
+                raise PeerUpdateException(ex)
+
         return updated_peer
 
     def get_all_peers(self, vpn_name: str) -> list[PeerDbModel]:
@@ -228,8 +272,17 @@ class VpnManager:
             vpn = self.get_vpn(vpn_name)
             if vpn.connection_info is not None:
                 server_manager = server_manager_factory(vpn.connection_info.type)
+            else:
+                server_manager = None
+
+            if server_manager is not None:
                 server_manager.remove_peer(vpn, peer)
-            self._db_manager.delete_peer(vpn_name, peer, changed_by=changed_by)
+            try:
+                self._db_manager.delete_peer(vpn_name, peer, changed_by=changed_by)
+            except DynamoDeletePeerException as ex:
+                if server_manager is not None:
+                    server_manager.add_peer(vpn, peer)
+                    raise PeerUpdateException(ex)
 
     @staticmethod
     def generate_wireguard_keys() -> tuple[str, str]:
@@ -286,7 +339,7 @@ class VpnManager:
         server_manager = server_manager_factory(_vpn.connection_info.type)
         wg_config_data = server_manager.dump_interface_config(_vpn.wireguard.interface, _vpn.connection_info)
         if isinstance(wg_config_data, str):
-            raise VpnUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
+            raise PeerUpdateException(f"Unable to import peers from {_vpn.name}: {wg_config_data}")
 
         added_peers = []
         for peer in wg_config_data.peers:
@@ -315,18 +368,28 @@ class VpnManager:
     def add_tag_to_peer(self, vpn_name: str, peer_ip: str, tag: str, changed_by: str, message: str):
         """Add a tag to an existing peer"""
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=peer_ip)
-        peer.message = message
-        if tag not in peer.tags:
-            peer.tags.append(tag)
-            self._db_manager.update_peer(vpn_name, peer, changed_by)
+        if peer is not None:
+            peer = deepcopy(peer)
+            peer.message = message
+            if tag not in peer.tags:
+                peer.tags.append(tag)
+                try:
+                    self._db_manager.update_peer(vpn_name, peer, changed_by)
+                except DynamoUpdatePeerException as ex:
+                    raise PeerUpdateException(ex)
 
     def delete_tag_from_peer(self, vpn_name: str, peer_ip: str, tag: str, changed_by: str, message: str):
         """Delete a tag from an existing peer"""
         peer = self.get_peers_by_ip(vpn_name=vpn_name, ip_address=peer_ip)
-        peer.message = message
-        if tag in peer.tags:
-            peer.tags.remove(tag)
-            self._db_manager.update_peer(vpn_name, peer, changed_by)
+        if peer is not None:
+            peer = deepcopy(peer)
+            peer.message = message
+            if tag in peer.tags:
+                peer.tags.remove(tag)
+                try:
+                    self._db_manager.update_peer(vpn_name, peer, changed_by)
+                except DynamoUpdatePeerException as ex:
+                    raise PeerUpdateException(ex)
 
     def get_tag_history(
         self, vpn_name: str, tag: str, start_time: str = None, end_time: str = None
